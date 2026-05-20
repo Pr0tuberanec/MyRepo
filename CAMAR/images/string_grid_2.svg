@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+	width="512" height="512" viewBox="-256.0 -256.0 512.0 512.0">
+
+
+<defs>
+<style>
+	.landmark {{ }}
+	.agent {{ }}
+	.goal {stroke: #84A1AE; stroke-width: 1.5753846153846154;}
+</style>
+</defs>
+
+
+<circle class="landmark" cx="-236.308" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-196.923" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-157.538" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-118.154" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-78.769" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-39.385" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="39.385" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="78.769" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="118.154" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="157.538" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="196.923" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="-236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="-196.923" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="-196.923" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="-196.923" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="-157.538" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="-157.538" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="-157.538" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="-118.154" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="-118.154" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="-78.769" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="-78.769" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="-78.769" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="-39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="-39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="-39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-196.923" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-118.154" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-78.769" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-39.385" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="0.000" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="39.385" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="78.769" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="157.538" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="196.923" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="39.385" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="78.769" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="78.769" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="78.769" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="118.154" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="118.154" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="118.154" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="157.538" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="157.538" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="196.923" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="196.923" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="196.923" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-236.308" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-196.923" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-157.538" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-118.154" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-78.769" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="-39.385" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="0.000" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="39.385" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="78.769" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="118.154" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="157.538" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="196.923" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+<circle class="landmark" cx="236.308" cy="236.308" r="19.692307692307693" fill="hsl(199, 21%, 60%)">  </circle>
+
+
+<circle class="goal" cx="-157.538" cy="118.154" r="3.1507692307692308" fill="hsl(3, 53%, 50%)">  </circle>
+<circle class="goal" cx="-196.923" cy="157.538" r="3.1507692307692308" fill="hsl(205, 55%, 40%)">  </circle>
+<circle class="goal" cx="-157.538" cy="-118.154" r="3.1507692307692308" fill="hsl(222, 29%, 56%)">  </circle>
+<circle class="goal" cx="118.154" cy="196.923" r="3.1507692307692308" fill="hsl(185, 100%, 39%)">  </circle>
+<circle class="goal" cx="-157.538" cy="78.769" r="3.1507692307692308" fill="hsl(172, 54%, 64%)">  </circle>
+<circle class="goal" cx="-118.154" cy="-39.385" r="3.1507692307692308" fill="hsl(172, 84%, 34%)">  </circle>
+<circle class="goal" cx="196.923" cy="-157.538" r="3.1507692307692308" fill="hsl(31, 17%, 48%)">  </circle>
+<circle class="goal" cx="-118.154" cy="-157.538" r="3.1507692307692308" fill="hsl(3, 53%, 50%)">  </circle>
+
+
+<circle class="agent" cx="-39.385" cy="-157.538" r="7.8769230769230765" fill="hsla(3, 53%, 50%, 0.8)">  </circle>
+<circle class="agent" cx="-196.923" cy="39.385" r="7.8769230769230765" fill="hsla(205, 55%, 40%, 0.8)">  </circle>
+<circle class="agent" cx="78.769" cy="-39.385" r="7.8769230769230765" fill="hsla(222, 29%, 56%, 0.8)">  </circle>
+<circle class="agent" cx="157.538" cy="-157.538" r="7.8769230769230765" fill="hsla(185, 100%, 39%, 0.8)">  </circle>
+<circle class="agent" cx="78.769" cy="-118.154" r="7.8769230769230765" fill="hsla(172, 54%, 64%, 0.8)">  </circle>
+<circle class="agent" cx="-78.769" cy="78.769" r="7.8769230769230765" fill="hsla(172, 84%, 34%, 0.8)">  </circle>
+<circle class="agent" cx="39.385" cy="118.154" r="7.8769230769230765" fill="hsla(31, 17%, 48%, 0.8)">  </circle>
+<circle class="agent" cx="-78.769" cy="118.154" r="7.8769230769230765" fill="hsla(3, 53%, 50%, 0.8)">  </circle>
+</svg>

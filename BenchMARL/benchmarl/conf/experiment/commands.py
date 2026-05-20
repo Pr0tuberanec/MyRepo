@@ -1,0 +1,2 @@
+python3 run.py algorithm=mappo task=vmas/balance experiment.loggers=["tensorboard"] experiment.render=False experiment.max_n_frames=200000 experiment.on_policy_collected_frames_per_batch=400 experiment.on_polic
+y_minibatch_size=25
