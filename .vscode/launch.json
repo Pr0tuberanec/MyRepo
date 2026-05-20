@@ -1,0 +1,67 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "BenchMARL Debug",
+            "type": "python",
+            "request": "launch",
+            "module": "benchmarl.run",
+            "args": [
+                "--multirun",
+                "algorithm=mappo",
+                "task=camar/random_grid",
+                "experiment=custom",
+                "seed=0",
+                "experiment.loggers=[]"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}/BenchMARL",
+            "env": {
+                "HYDRA_FULL_ERROR": "1"
+            }
+        },
+        {
+            "name": "BenchMARL Debug (Single Run)",
+            "type": "python",
+            "request": "launch",
+            "module": "benchmarl.run",
+            "args": [
+                "algorithm=mappo",
+                "task=camar/random_grid",
+                "experiment=custom",
+                "seed=3",
+                "experiment.loggers=[]"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}/BenchMARL",
+            "env": {
+                "HYDRA_FULL_ERROR": "1"
+            }
+        },
+        {
+            "name": "Gire check",
+            "type": "python",
+            "request": "launch",
+            "module": "benchmarl.run",
+            "args": [
+                "algorithm=mappo",
+                "task=camar/random_grid",
+                "experiment=base_experiment",
+                "seed=0",
+                "experiment.loggers=[]",
+                "experiment.render=False",
+                "experiment.max_n_frames=200000",
+                "experiment.on_policy_collected_frames_per_batch=400",
+                "experiment.on_policy_minibatch_size=25"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}/BenchMARL",
+            "env": {
+                "HYDRA_FULL_ERROR": "1"
+            }
+        }
+    ]
+}
