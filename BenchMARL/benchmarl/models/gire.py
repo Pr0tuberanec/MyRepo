@@ -19,6 +19,11 @@ from torchrl.data.tensor_specs import Composite, Unbounded
 
 from benchmarl.models.common import Model, ModelConfig
 
+GIRE_DEBUG_BUILD = "2026-05-21-rollout_step-v2"
+print(f"[GIRE-DEBUG] loaded {__file__} build={GIRE_DEBUG_BUILD}", flush=True)
+
+_gire_forward_calls = 0
+
 try:
     from torchrl.envs.utils import ExplorationType, exploration_type
 except ImportError:
@@ -296,24 +301,39 @@ class GIRE(Model):
         return h_out, h
 
     def _forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        global _gire_forward_calls
+        if _gire_forward_calls < 3:
+            print(
+                f"[GIRE-DEBUG] _forward #{_gire_forward_calls} build={GIRE_DEBUG_BUILD}",
+                flush=True,
+            )
+            _gire_forward_calls += 1
+
         obs_feats = self._gather_obs_features(tensordict)
         is_init = tensordict.get("is_init")
         h_0 = tensordict.get(self.hidden_state_name, None)
-        training = h_0 is None
 
         missing_batch = False
-        if not training and obs_feats.ndim == 2:
+        if obs_feats.ndim == 2:
             missing_batch = True
             obs_feats = obs_feats.unsqueeze(0)
             if h_0 is not None:
                 h_0 = h_0.unsqueeze(0)
             is_init = is_init.unsqueeze(0)
 
-        if not training:
+        if obs_feats.ndim == 3:
             obs_feats = obs_feats.unsqueeze(1)
-            is_init = is_init.unsqueeze(1)
+            if h_0 is not None and h_0.ndim == 3:
+                h_0 = h_0.unsqueeze(1)
+            if is_init.ndim == 2:
+                is_init = is_init.unsqueeze(1)
 
         b, seq, a, _e = obs_feats.shape
+        # PPO replay may still carry hidden keys; unroll over T from is_init, not stored h.
+        rollout_step = seq == 1
+        if not rollout_step:
+            h_0 = None
+
         h_out, h_n = self._run_encoder_over_time(obs_feats, is_init, h_0)
 
         state_bt = self._state_bt(tensordict, b, seq, obs_feats.device, obs_feats.dtype)
@@ -323,17 +343,9 @@ class GIRE(Model):
             b * seq * a, -1
         )
 
-        env_step = not training
-        use_student = self._use_student_z(tensordict, env_step)
+        use_student = self._use_student_z(tensordict, rollout_step)
 
-        if training:
-            if use_student:
-                z_for_logits = self.policy_app(flat_obs).view(b, seq, a, self.z_dims)
-            else:
-                z_teacher_dist = self.coach_net(flat_obs, flat_state)
-                z_for_logits = z_teacher_dist.rsample().view(b, seq, a, self.z_dims)
-            logits = self.agent_head(h_out, z_for_logits)
-        else:
+        if rollout_step:
             h_last = h_out[:, -1]
             if use_student:
                 z_for_logits = self.policy_app(flat_obs).view(b, seq, a, self.z_dims)
@@ -347,12 +359,20 @@ class GIRE(Model):
                 z_for_logits = z_teacher_dist.rsample().view(b, seq, a, self.z_dims)[:, -1]
             logits = self.agent_head(h_last, z_for_logits)
             logits = logits.squeeze(1)
+        else:
+            if use_student:
+                z_for_logits = self.policy_app(flat_obs).view(b, seq, a, self.z_dims)
+            else:
+                z_teacher_dist = self.coach_net(flat_obs, flat_state)
+                z_for_logits = z_teacher_dist.rsample().view(b, seq, a, self.z_dims)
+            logits = self.agent_head(h_out, z_for_logits)
+
         if missing_batch:
             logits = logits.squeeze(0)
             h_n = h_n.squeeze(0)
 
         tensordict.set(self.out_key, logits)
-        if not training:
+        if rollout_step:
             tensordict.set(("next", *self.hidden_state_name), h_n.unsqueeze(-2))
         return tensordict
 
