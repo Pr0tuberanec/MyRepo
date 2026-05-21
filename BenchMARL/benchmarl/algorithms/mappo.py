@@ -130,9 +130,10 @@ class Mappo(Algorithm):
         assert isinstance(model_config, _GIREConfig)
         inner = self.observation_spec[group].clone().to(self.device)
         if model_config.obs_last_action:
-            ac = self.action_spec[group, "action"]
-            n_act = getattr(ac.space, "n", int(ac.shape[-1]))
-            inner["prev_action"] = Unbounded(shape=(n_act,))
+            # Match per-agent action layout (e.g. CAMAR continuous: (n_agents, action_dim)).
+            inner["prev_action"] = self.action_spec[group, "action"].clone().to(
+                self.device
+            )
         spec_dict = {group: inner}
         if self.state_spec is not None:
             for sk in self.state_spec.keys(True, True):

@@ -76,6 +76,8 @@ class CamarClass(TaskClass):
         for group in self.group_map(env):
             if "info" in observation_spec[group]:
                 del observation_spec[(group, "info")]
+        if "state" in observation_spec.keys():
+            del observation_spec["state"]
         return observation_spec
 
     def info_spec(self, env: EnvBase) -> Optional[Composite]:
@@ -85,7 +87,10 @@ class CamarClass(TaskClass):
         return env.full_action_spec_unbatched
 
     def state_spec(self, env: EnvBase) -> Optional[Composite]:
-        return None
+        observation_spec = env.full_observation_spec_unbatched.clone()
+        if "state" not in observation_spec.keys():
+            return None
+        return Composite({"state": observation_spec["state"].clone()})
 
     def action_mask_spec(self, env: EnvBase) -> Optional[Composite]:
         return None

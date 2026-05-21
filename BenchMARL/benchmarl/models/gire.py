@@ -170,6 +170,7 @@ class GIRE(Model):
             else 0
         )
         agent_id_dim = self.n_agents if self.obs_agent_id else 0
+        self.prev_action_dim = prev_dim
         self.obs_input_dims = obs_dim + prev_dim + agent_id_dim
 
         self.encoder_fc = nn.Linear(self.obs_input_dims, rnn_hidden_dim)
@@ -224,7 +225,7 @@ class GIRE(Model):
                     torch.zeros(
                         *lead,
                         a,
-                        self.n_actions,
+                        self.prev_action_dim,
                         device=obs.device,
                         dtype=obs.dtype,
                     )
@@ -314,7 +315,6 @@ class GIRE(Model):
 
         b, seq, a, _e = obs_feats.shape
         h_out, h_n = self._run_encoder_over_time(obs_feats, is_init, h_0)
-        h_last = h_out[:, -1]
 
         state_bt = self._state_bt(tensordict, b, seq, obs_feats.device, obs_feats.dtype)
 
@@ -326,18 +326,26 @@ class GIRE(Model):
         env_step = not training
         use_student = self._use_student_z(tensordict, env_step)
 
-        if use_student:
-            z_for_logits = self.policy_app(flat_obs).view(b, seq, a, self.z_dims)
-            z_for_logits = (
-                z_for_logits[:, -1] if z_for_logits.shape[1] > 1 else z_for_logits.squeeze(1)
-            )
+        if training:
+            if use_student:
+                z_for_logits = self.policy_app(flat_obs).view(b, seq, a, self.z_dims)
+            else:
+                z_teacher_dist = self.coach_net(flat_obs, flat_state)
+                z_for_logits = z_teacher_dist.rsample().view(b, seq, a, self.z_dims)
+            logits = self.agent_head(h_out, z_for_logits)
         else:
-            z_teacher_dist = self.coach_net(flat_obs, flat_state)
-            z_for_logits = z_teacher_dist.rsample().view(b, seq, a, self.z_dims)[:, -1]
-
-        logits = self.agent_head(h_last, z_for_logits)
-
-        if not training:
+            h_last = h_out[:, -1]
+            if use_student:
+                z_for_logits = self.policy_app(flat_obs).view(b, seq, a, self.z_dims)
+                z_for_logits = (
+                    z_for_logits[:, -1]
+                    if z_for_logits.shape[1] > 1
+                    else z_for_logits.squeeze(1)
+                )
+            else:
+                z_teacher_dist = self.coach_net(flat_obs, flat_state)
+                z_for_logits = z_teacher_dist.rsample().view(b, seq, a, self.z_dims)[:, -1]
+            logits = self.agent_head(h_last, z_for_logits)
             logits = logits.squeeze(1)
         if missing_batch:
             logits = logits.squeeze(0)
