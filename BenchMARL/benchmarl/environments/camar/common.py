@@ -2,8 +2,8 @@ from typing import Callable, Dict, List, Optional
 from benchmarl.environments.common import Task, TaskClass
 from benchmarl.utils import DEVICE_TYPING
 from tensordict import TensorDictBase
-from torchrl.envs import EnvBase
-from torchrl.data import Composite, UnboundedContinuous
+from torchrl.data import Composite, Unbounded, UnboundedContinuous
+from torchrl.envs import EnvBase, Transform, TransformedEnv
 from camar.integrations.torchrl import CamarWrapper
 from camar import camar_v0
 
@@ -76,8 +76,6 @@ class CamarClass(TaskClass):
         for group in self.group_map(env):
             if "info" in observation_spec[group]:
                 del observation_spec[(group, "info")]
-        if "state" in observation_spec.keys():
-            del observation_spec["state"]
         return observation_spec
 
     def info_spec(self, env: EnvBase) -> Optional[Composite]:
@@ -87,10 +85,47 @@ class CamarClass(TaskClass):
         return env.full_action_spec_unbatched
 
     def state_spec(self, env: EnvBase) -> Optional[Composite]:
-        observation_spec = env.full_observation_spec_unbatched.clone()
-        if "state" not in observation_spec.keys():
-            return None
-        return Composite({"state": observation_spec["state"].clone()})
+        obs_shape = env.observation_spec["agents", "observation"].shape
+        n_agents, obs_dim = obs_shape[-2], obs_shape[-1]
+        
+        shape = (n_agents * obs_dim,)
+        
+        return Composite(
+            {
+                "state": Unbounded(
+                    shape=shape,
+                    device=env.device,
+                )
+            },
+            device=env.device,
+        )
+
+    def get_env_transforms(self, env: EnvBase) -> List[Transform]:
+        """TorchRL transforms applied via ``TransformedEnv`` (wrapper-like: same env API, richer ``TensorDict``).
+
+        Minimal set for GIRE + ``GireActorModel`` ``in_keys``:
+        - ``CamarGlobalStateTransform``: builds root ``state`` from all agents' observations (teacher / CTDE).
+        - ``InitTracker``: adds ``is_init`` so GRU resets hidden state at episode start.
+        - ``TensorDictPrimer``: adds ``h_0`` so recurrent actor has a hidden state on the first step.
+        """
+        from benchmarl.environments.camar.transforms import CamarGlobalStateTransform
+        from torchrl.envs import InitTracker, TensorDictPrimer
+        from torchrl.data import Unbounded
+        
+        obs_shape = env.observation_spec["agents", "observation"].shape
+        n_agents = obs_shape[-2]
+        
+        primer = TensorDictPrimer(
+            {
+                "h_0": Unbounded(
+                    shape=(n_agents, 64),
+                    device=env.device,
+                )
+            },
+            reset_key="_reset",
+            expand_specs=True,
+        )
+        return [CamarGlobalStateTransform(group="agents"), InitTracker(init_key="is_init"), primer]
 
     def action_mask_spec(self, env: EnvBase) -> Optional[Composite]:
         return None
