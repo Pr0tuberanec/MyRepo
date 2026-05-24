@@ -30,12 +30,10 @@ def hydra_experiment(cfg: DictConfig) -> None:
     task_name = hydra_choices.task
     algorithm_name = hydra_choices.algorithm
 
-    print("[GIRE-DEBUG] benchmarl.run.py started (check gire import line next)", flush=True)
     print(f"\nAlgorithm: {algorithm_name}, Task: {task_name}")
     print("\nLoaded config:\n")
     print(OmegaConf.to_yaml(cfg))
 
-    print("hydra_experiment ", type(cfg.experiment))
     experiment = load_experiment_from_hydra(cfg, task_name=task_name)
     experiment.run()
 

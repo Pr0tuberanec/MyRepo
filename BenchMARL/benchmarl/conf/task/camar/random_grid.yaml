@@ -2,8 +2,8 @@ map_generator: "random_grid"
 dynamic: "HolonomicDynamic"
 lifelong: false
 window: 0.3
-max_steps: 20
-frameskip: 1
+max_steps: 1000
+frameskip: 15
 max_obs: 3 # can be adjusted
 pos_shaping_factor: 1.0 # can be adjusted
 contact_force: 500

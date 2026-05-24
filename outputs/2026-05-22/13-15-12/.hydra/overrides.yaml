@@ -1,0 +1,4 @@
+- algorithm=mappo
+- task=camar/random_grid
+- experiment=custom
+- experiment.loggers=[tensorboard]

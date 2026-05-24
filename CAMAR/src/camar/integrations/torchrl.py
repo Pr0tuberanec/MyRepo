@@ -113,15 +113,8 @@ class CamarWrapper(_EnvWrapper):
             shape=(*self.batch_size, env.num_agents),
             device=self.device,
         )
-        # Global state for centralised critics / GIRE coach: flat [agent_pos, goal_pos].
-        self._global_state_dim = env.num_agents * 4
-        global_state = Unbounded(
-            shape=(*self.batch_size, self._global_state_dim),
-            device=self.device,
-        )
         self.observation_spec = Composite(
             agents=agents_observation,
-            state=global_state,
             shape=self.batch_size,
             device=self.device,
         )
@@ -158,17 +151,6 @@ class CamarWrapper(_EnvWrapper):
         if seed is None:
             raise Exception("CAMAR requires an integer seed.")
         self._key = jax.random.PRNGKey(seed)
-
-    def _global_state_tensor(self, state) -> torch.Tensor:
-        """(batch, num_agents*4): concatenated agent positions and goal positions."""
-        jax = self.jax
-        pos = state.physical_state.agent_pos
-        goals = state.goal_pos
-        flat = jax.numpy.concatenate(
-            [pos.reshape(*self.batch_size, -1), goals.reshape(*self.batch_size, -1)],
-            axis=-1,
-        )
-        return _ndarray_to_tensor(flat)
 
     def _partial_reset(self, keys, state, envs_to_reset):
         obs_r, state_r = self._jit_vmap_env_reset(keys)
@@ -225,7 +207,6 @@ class CamarWrapper(_EnvWrapper):
         tensordict_out = TensorDict(
             source={
                 "agents": tensordict_agents,
-                "state": self._global_state_tensor(self._state),
                 "done": done,
                 "terminated": done.clone(),
             },
@@ -276,7 +257,6 @@ class CamarWrapper(_EnvWrapper):
         tensordict_out = TensorDict(
             source={
                 "agents": tensordict_agents,
-                "state": self._global_state_tensor(self._state),
                 "done": done,
                 "terminated": done.clone(),
                 "flowtime": flowtime,

@@ -78,6 +78,7 @@ class Mappo(Algorithm):
     def _get_loss(
         self, group: str, policy_for_loss: TensorDictModule, continuous: bool
     ) -> Tuple[LossModule, bool]:
+        # Loss
         loss_module = ClipPPOLoss(
             actor=policy_for_loss,
             critic=self.get_critic(group),
@@ -102,49 +103,15 @@ class Mappo(Algorithm):
         )
         return loss_module, False
 
-    def _get_parameters(self, group: str, loss: LossModule) -> Dict[str, Iterable]:
-        from benchmarl.models.gire import GIREConfig
-
-        actor_params = loss.actor_network_params.flatten_keys()
-        if isinstance(self.model_config, GIREConfig):
-            if self.model_config.gire_stage == 1:
-                actor_params = {
-                    k: v
-                    for k, v in actor_params.items()
-                    if ".policy_app." not in k
-                }
-            elif self.model_config.gire_stage == 2:
-                actor_params = {
-                    k: v
-                    for k, v in actor_params.items()
-                    if ".coach_net." not in k
-                }
+    def _get_parameters(self, group: str, loss: ClipPPOLoss) -> Dict[str, Iterable]:
         return {
-            "loss_objective": list(actor_params.values()),
+            "loss_objective": list(loss.actor_network_params.flatten_keys().values()),
             "loss_critic": list(loss.critic_network_params.flatten_keys().values()),
         }
-
-    def _gire_actor_input_spec(self, group, model_config) -> Composite:
-        from benchmarl.models.gire import GIREConfig as _GIREConfig
-
-        assert isinstance(model_config, _GIREConfig)
-        inner = self.observation_spec[group].clone().to(self.device)
-        if model_config.obs_last_action:
-            # Match per-agent action layout (e.g. CAMAR continuous: (n_agents, action_dim)).
-            inner["prev_action"] = self.action_spec[group, "action"].clone().to(
-                self.device
-            )
-        spec_dict = {group: inner}
-        if self.state_spec is not None:
-            for sk in self.state_spec.keys(True, True):
-                spec_dict[sk] = self.state_spec[sk].clone().to(self.device)
-        return Composite(spec_dict)
 
     def _get_policy_for_loss(
         self, group: str, model_config: ModelConfig, continuous: bool
     ) -> TensorDictModule:
-        from benchmarl.models.gire import GIREConfig
-
         n_agents = len(self.group_map[group])
         if continuous:
             logits_shape = list(self.action_spec[group, "action"].shape)
@@ -155,12 +122,9 @@ class Mappo(Algorithm):
                 self.action_spec[group, "action"].space.n,
             ]
 
-        if isinstance(model_config, GIREConfig):
-            actor_input_spec = self._gire_actor_input_spec(group, model_config)
-        else:
-            actor_input_spec = Composite(
-                {group: self.observation_spec[group].clone().to(self.device)}
-            )
+        actor_input_spec = Composite(
+            {group: self.observation_spec[group].clone().to(self.device)}
+        )
 
         actor_output_spec = Composite(
             {

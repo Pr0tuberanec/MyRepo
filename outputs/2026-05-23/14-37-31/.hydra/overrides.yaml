@@ -1,0 +1,6 @@
+- algorithm=gire_mappo
+- task=camar/random_grid
+- algorithm.training_stage=1
+- experiment.max_n_iters=5
+- experiment.on_policy_collected_frames_per_batch=100
+- experiment.checkpoint_interval=500

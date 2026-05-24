@@ -74,7 +74,7 @@ class GireMappo(Mappo):
         actor_net = GireActorModel(
             obs_input_dims=obs_dim,
             z_dims=self.z_dims,
-            rnn_hidden_dim=model_config.rnn_hidden_dim if hasattr(model_config, "rnn_hidden_dim") else 64,
+            rnn_hidden_dim=model_config.rnn_hidden_dim if hasattr(model_config, "rnn_hidden_dim") else 128,
             out_features=out_features,
         )
         
@@ -256,7 +256,7 @@ class GireMappo(Mappo):
 class GireMappoConfig(MappoConfig):
     """Config for GIRE + MAPPO (PTDE two-stage training)."""
 
-    z_dims: int = 64
+    z_dims: int = 128
     training_stage: int = 1
     var_floor: float = 0.002
     teacher_checkpoint: Optional[str] = None

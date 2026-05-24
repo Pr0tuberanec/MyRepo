@@ -115,10 +115,13 @@ class CamarClass(TaskClass):
         obs_shape = env.observation_spec["agents", "observation"].shape
         n_agents = obs_shape[-2]
         
+        # Read hidden size from config, defaulting to 128 (BenchMARL GRU default)
+        rnn_hidden_dim = self.config.get("rnn_hidden_dim", 128)
+        
         primer = TensorDictPrimer(
             {
                 "h_0": Unbounded(
-                    shape=(n_agents, 64),
+                    shape=(n_agents, rnn_hidden_dim),
                     device=env.device,
                 )
             },

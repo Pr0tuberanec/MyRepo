@@ -1,9 +1,0 @@
-name: gire
-rnn_hidden_dim: 64
-z_dims: 8
-state_dims: 32  # CAMAR random_grid (8 agents): 8*2 pos + 8*2 goals
-var_floor: 0.01
-obs_last_action: true
-obs_agent_id: true
-distill_coef: 0.0
-gire_stage: 1

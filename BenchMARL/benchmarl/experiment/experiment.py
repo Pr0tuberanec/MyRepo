@@ -384,7 +384,6 @@ class Experiment(CallbackNotifier):
         return self.algorithm_config.on_policy()
 
     def _setup(self):
-        print("_setup ", type(self.config))
         self.config.validate(self.on_policy)
         seed_everything(self.seed)
         self._perform_checks()

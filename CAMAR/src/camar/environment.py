@@ -169,13 +169,6 @@ class Camar:
             self.map_generator.goal_rad if self.homogeneous_goals else state.sizes.goal_rad
         )  # (num_agents, )
 
-        # jax.lax.cond(
-        #     jnp.any(on_goal),
-        #     lambda _: print("HMHM"),
-        #     lambda _: print("Nope"),
-        #     operand=None
-        # )
-
         # done = jnp.full((self.num_agents, ), state.step >= self.max_steps)
         done = jnp.logical_or(state.step >= self.max_steps, on_goal.all(axis=-1))
 
@@ -190,17 +183,7 @@ class Camar:
         current_time = (state.step + 1) * self.step_dt
         time_to_reach_goal = jnp.where(just_arrived, current_time, state.time_to_reach_goal)
         num_collisions = state.num_collisions + is_collision.astype(jnp.int32)
-        # def break_if_done(done):
-        #     jax.debug.print("done={done}, step={step}", done=done, step=state.step)
-        #     jax.debug.breakpoint()
 
-        # jax.lax.cond(
-        #     done,
-        #     break_if_done,
-        #     lambda _: None,
-        #     operand=None
-        # )
-        # jax.debug.print("x = {x}, y = {y}", x=done, y = state.step)
         new_state = state.replace(
             physical_state=physical_state,
             goal_pos=goal_pos,

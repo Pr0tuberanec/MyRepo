@@ -17,7 +17,7 @@ from .gnn import Gnn, GnnConfig
 from .gru import Gru, GruConfig
 from .lstm import Lstm, LstmConfig
 from .mlp import Mlp, MlpConfig
-from .gire import GIRE, GIREConfig
+
 classes = [
     "Mlp",
     "MlpConfig",
@@ -31,8 +31,6 @@ classes = [
     "GruConfig",
     "Lstm",
     "LstmConfig",
-    "GIRE",
-    "GIREConfig",
 ]
 
 model_config_registry = {
@@ -42,5 +40,4 @@ model_config_registry = {
     "deepsets": DeepsetsConfig,
     "gru": GruConfig,
     "lstm": LstmConfig,
-    "gire": GIREConfig,
 }

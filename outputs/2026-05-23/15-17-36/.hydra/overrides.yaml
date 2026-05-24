@@ -1,0 +1,7 @@
+- algorithm=gire_mappo
+- task=camar/random_grid
+- algorithm.training_stage=2
+- algorithm.teacher_checkpoint=/home/user/Nauchka/test_stage1_ckpt/giremappo_random_grid_mlp__703700e1_26_05_23-15_14_03/checkpoints/checkpoint_100.pt
+- experiment.max_n_iters=1
+- experiment.on_policy_collected_frames_per_batch=100
+- experiment.loggers=[csv]

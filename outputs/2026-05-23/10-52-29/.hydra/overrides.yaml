@@ -1,0 +1,3 @@
+- algorithm=gire_mappo
+- task=camar/random_grid
+- experiment.max_n_iters=1
