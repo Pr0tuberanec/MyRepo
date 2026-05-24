@@ -105,30 +105,36 @@ class CamarClass(TaskClass):
 
         Minimal set for GIRE + ``GireActorModel`` ``in_keys``:
         - ``CamarGlobalStateTransform``: builds root ``state`` from all agents' observations (teacher / CTDE).
-        - ``InitTracker``: adds ``is_init`` so GRU resets hidden state at episode start.
-        - ``TensorDictPrimer``: adds ``h_0`` so recurrent actor has a hidden state on the first step.
+        - ``InitTracker``: adds ``is_init`` so GRU resets hidden state at episode start (if use_gire).
+        - ``TensorDictPrimer``: adds ``h_0`` so recurrent actor has a hidden state on the first step (if use_gire).
         """
         from benchmarl.environments.camar.transforms import CamarGlobalStateTransform
-        from torchrl.envs import InitTracker, TensorDictPrimer
-        from torchrl.data import Unbounded
-        
-        obs_shape = env.observation_spec["agents", "observation"].shape
-        n_agents = obs_shape[-2]
-        
-        # Read hidden size from config, defaulting to 128 (BenchMARL GRU default)
-        rnn_hidden_dim = self.config.get("rnn_hidden_dim", 128)
-        
-        primer = TensorDictPrimer(
-            {
-                "h_0": Unbounded(
-                    shape=(n_agents, rnn_hidden_dim),
-                    device=env.device,
-                )
-            },
-            reset_key="_reset",
-            expand_specs=True,
-        )
-        return [CamarGlobalStateTransform(group="agents"), InitTracker(init_key="is_init"), primer]
+        transforms = [CamarGlobalStateTransform(group="agents")]
+
+        # Only add h_0 and is_init if we explicitly enable GIRE in the task config
+        if self.config.get("use_gire", False):
+            from torchrl.envs import InitTracker, TensorDictPrimer
+            from torchrl.data import Unbounded
+            
+            obs_shape = env.observation_spec["agents", "observation"].shape
+            n_agents = obs_shape[-2]
+            
+            # Read hidden size from config, defaulting to 128 (BenchMARL GRU default)
+            rnn_hidden_dim = self.config.get("rnn_hidden_dim", 128)
+            
+            primer = TensorDictPrimer(
+                {
+                    "h_0": Unbounded(
+                        shape=(n_agents, rnn_hidden_dim),
+                        device=env.device,
+                    )
+                },
+                reset_key="_reset",
+                expand_specs=True,
+            )
+            transforms.extend([InitTracker(init_key="is_init"), primer])
+
+        return transforms
 
     def action_mask_spec(self, env: EnvBase) -> Optional[Composite]:
         return None
