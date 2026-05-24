@@ -1,5 +1,5 @@
 map_generator: "random_grid"
-dynamic: "HolonomicDynamic"
+dynamic: "DiffDriveDynamic"
 lifelong: false
 window: 0.3
 max_steps: 1000
@@ -17,8 +17,9 @@ map_kwargs:
   grain_factor: 3
 
 dynamic_kwargs:
-  accel: 5.0
-  max_speed: 6.0
-  damping: 0.25
+  linear_speed_max: 1.0
+  linear_speed_min: -1.0
+  angular_speed_max: 2.0
+  angular_speed_min: -2.0
   mass: 1.0
   dt: 0.01
