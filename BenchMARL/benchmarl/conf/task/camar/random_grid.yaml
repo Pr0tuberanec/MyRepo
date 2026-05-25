@@ -1,5 +1,6 @@
 map_generator: "random_grid"
 dynamic: "DiffDriveDynamic"
+use_gire: false # Set to true when running GIRE algorithms to add h_0 and is_init transforms
 lifelong: false
 window: 0.3
 max_steps: 1000
