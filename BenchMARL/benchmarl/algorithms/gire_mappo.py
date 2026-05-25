@@ -23,6 +23,8 @@ class GireMappo(Mappo):
         self.training_stage = training_stage
         self.var_floor = var_floor
         self.teacher_checkpoint = teacher_checkpoint
+        # GireActorModel is recurrent; keep time dimension in replay buffer / PPO updates
+        self.has_rnn = True
 
     def _get_policy_for_loss(
         self, group: str, model_config: ModelConfig, continuous: bool
@@ -147,7 +149,7 @@ class GireMappo(Mappo):
             )
 
         # Assemble Sequence is handled inside the continuous branch above
-        return policy
+        return policy.to(self.device)
 
     def _get_policy_for_collection(
         self, policy_for_loss: TensorDictModule, group: str, continuous: bool
@@ -155,6 +157,7 @@ class GireMappo(Mappo):
         return policy_for_loss
 
     def process_batch(self, group: str, batch: TensorDictBase) -> TensorDictBase:
+        batch = batch.to(self.device)
         if self.training_stage == 1:
             return super().process_batch(group, batch)
         # Stage 2: Distillation doesn't require GAE/value estimation
