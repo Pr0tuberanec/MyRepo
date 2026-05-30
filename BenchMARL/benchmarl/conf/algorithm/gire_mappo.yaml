@@ -16,3 +16,4 @@ minibatch_advantage: False
 z_dims: 128
 training_stage: 1
 var_floor: 0.002
+zero_z: false

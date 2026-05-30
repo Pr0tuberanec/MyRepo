@@ -133,9 +133,11 @@ class GireActorModel(nn.Module):
         z_dims: int,
         rnn_hidden_dim: int,
         out_features: int,
+        zero_z: bool = False,
     ):
         super().__init__()
         self.rnn_hidden_dim = rnn_hidden_dim
+        self.zero_z = zero_z
 
         self.fc1 = nn.Linear(obs_input_dims, rnn_hidden_dim)
         self.rnn = nn.GRUCell(rnn_hidden_dim, rnn_hidden_dim)
@@ -168,6 +170,9 @@ class GireActorModel(nn.Module):
         is_init_exp = is_init_exp.expand(*original_shape, 1)
 
         h_0 = torch.where(is_init_exp.bool(), torch.zeros_like(h_0), h_0)
+
+        if self.zero_z:
+            z = torch.zeros_like(z)
 
         obs_flat = obs.view(batch_size, -1)
         z_flat = z.view(batch_size, -1)

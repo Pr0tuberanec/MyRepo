@@ -17,12 +17,21 @@ from benchmarl.algorithms.gire_networks import (
 class GireMappo(Mappo):
     """GIRE + MAPPO algorithm."""
 
-    def __init__(self, z_dims: int, training_stage: int, var_floor: float, teacher_checkpoint: Optional[str] = None, **kwargs):
+    def __init__(
+        self,
+        z_dims: int,
+        training_stage: int,
+        var_floor: float,
+        teacher_checkpoint: Optional[str] = None,
+        zero_z: bool = False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.z_dims = z_dims
         self.training_stage = training_stage
         self.var_floor = var_floor
         self.teacher_checkpoint = teacher_checkpoint
+        self.zero_z = zero_z
         # GireActorModel is recurrent; keep time dimension in replay buffer / PPO updates
         self.has_rnn = True
 
@@ -78,6 +87,7 @@ class GireMappo(Mappo):
             z_dims=self.z_dims,
             rnn_hidden_dim=model_config.rnn_hidden_dim if hasattr(model_config, "rnn_hidden_dim") else 128,
             out_features=out_features,
+            zero_z=self.zero_z,
         )
         
         z_in_key = (group, "z_dist_rsample") if self.training_stage == 1 else (group, "z_dot")
@@ -263,6 +273,7 @@ class GireMappoConfig(MappoConfig):
     training_stage: int = 1
     var_floor: float = 0.002
     teacher_checkpoint: Optional[str] = None
+    zero_z: bool = False
 
     @staticmethod
     def associated_class() -> Type:
