@@ -91,10 +91,10 @@ class Callback:
                 max_length_rollout_0 = max(r.batch_size[0], max_length_rollout_0)
             rollouts[i] = r
 
-        mean_flowtime = []
-        mean_makespan = []
-        mean_coordination = []
-        mean_success_rate = []
+        episode_flowtimes = []
+        episode_makespans = []
+        episode_coordinations = []
+        episode_success_rates = []
         for rollout in rollouts:
 
             flowtime = rollout.get(("next", "flowtime"))[-1]
@@ -102,25 +102,33 @@ class Callback:
             coordination = rollout.get(("next", "coordination"))[-1]
             on_goal = rollout.get(("next", "agents", "on_goal"))[-1, :, :].squeeze(-1).to(torch.float32)
 
-            mean_flowtime.append(flowtime)
-            mean_makespan.append(makespan)
-            mean_coordination.append(coordination)
-            mean_success_rate.append(on_goal)
-
-        mean_flowtime = torch.stack(mean_flowtime).nanmean()
-        mean_makespan = torch.stack(mean_makespan).nanmean()
-        mean_coordination = torch.stack(mean_coordination).nanmean()
-        mean_success_rate = torch.stack(mean_success_rate).mean()
+            episode_flowtimes.append(flowtime)
+            episode_makespans.append(makespan)
+            episode_coordinations.append(coordination)
+            episode_success_rates.append(on_goal)
 
         self.experiment.logger.log(
             {
-                "eval/mean_flowtime": mean_flowtime,
-                "eval/mean_makespan": mean_makespan,
-                "eval/mean_coordination": mean_coordination,
-                "eval/mean_success_rate": mean_success_rate,
+                "eval/mean_flowtime": torch.stack(episode_flowtimes).nanmean(),
+                "eval/mean_makespan": torch.stack(episode_makespans).nanmean(),
+                "eval/mean_coordination": torch.stack(episode_coordinations).nanmean(),
+                "eval/mean_success_rate": torch.stack(episode_success_rates).mean(),
             },
             step=self.experiment.n_iters_performed,
         )
+
+        if self.experiment.logger.json_writer is not None:
+            self.experiment.logger.json_writer.write(
+                metrics={
+                    "success_rate": torch.stack([x.mean() for x in episode_success_rates]),
+                    "flowtime": torch.stack(episode_flowtimes).flatten(),
+                    "makespan": torch.stack(episode_makespans).flatten(),
+                    "coordination": torch.stack(episode_coordinations).flatten(),
+                },
+                total_frames=self.experiment.total_frames,
+                evaluation_step=self.experiment.total_frames
+                // self.experiment.config.evaluation_interval,
+            )
 
     def on_state_dict(self, state_dict: Dict[str, Any]):
         """A callback called at state_dict save."""
