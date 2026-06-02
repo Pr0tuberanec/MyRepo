@@ -148,6 +148,14 @@ class Logger:
                         for key, value in batch.get(("next", group, "info")).items()
                     }
                 )
+        info_td = batch.get(("next", "info"), None)
+        if info_td is not None:
+            to_log.update(
+                {
+                    f"collection/info/{key}": value.to(torch.float).mean().item()
+                    for key, value in info_td.items()
+                }
+            )
         to_log.update(task.log_info(batch))
         # global_episode_rewards has shape (n_episodes) as we took the mean over groups
         global_episode_rewards = self._log_global_episode_reward(
