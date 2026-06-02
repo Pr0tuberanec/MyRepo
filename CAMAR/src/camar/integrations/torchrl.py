@@ -113,8 +113,31 @@ class CamarWrapper(_EnvWrapper):
             shape=(*self.batch_size, env.num_agents),
             device=self.device,
         )
+        info_spec = Composite(
+            on_goal_rate=Unbounded(shape=(*self.batch_size,), device=self.device),
+            on_goal_count=Unbounded(shape=(*self.batch_size,), device=self.device),
+            collision_count_step=Unbounded(
+                shape=(*self.batch_size,), device=self.device
+            ),
+            reward_goal_progress_mean=Unbounded(
+                shape=(*self.batch_size,), device=self.device
+            ),
+            reward_goal_bonus_mean=Unbounded(
+                shape=(*self.batch_size,), device=self.device
+            ),
+            reward_team_bonus_mean=Unbounded(
+                shape=(*self.batch_size,), device=self.device
+            ),
+            reward_collision_penalty_mean=Unbounded(
+                shape=(*self.batch_size,), device=self.device
+            ),
+            reward_total_mean=Unbounded(shape=(*self.batch_size,), device=self.device),
+            shape=self.batch_size,
+            device=self.device,
+        )
         self.observation_spec = Composite(
             agents=agents_observation,
+            info=info_spec,
             shape=self.batch_size,
             device=self.device,
         )
