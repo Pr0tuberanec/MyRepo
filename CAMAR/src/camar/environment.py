@@ -197,9 +197,17 @@ class Camar:
         )
 
         obs = self.get_obs(new_state)
-        reward = self.get_reward(state, actions, new_state)
+        reward_components = self.get_reward_components(state, actions, new_state)
+        reward = reward_components["total"].reshape(-1, 1)
+        info = {
+            "reward_goal_progress_mean": reward_components["goal_progress"].mean(),
+            "reward_goal_bonus_mean": reward_components["goal_bonus"].mean(),
+            "reward_team_bonus_mean": reward_components["team_bonus"].mean(),
+            "reward_collision_penalty_mean": reward_components["collision_penalty"].mean(),
+            "reward_total_mean": reward_components["total"].mean(),
+        }
 
-        return obs, new_state, reward, done, {}
+        return obs, new_state, reward, done, info
 
     def get_obs(self, state: State) -> Array:
         agent_pos = state.physical_state.agent_pos
@@ -268,19 +276,34 @@ class Camar:
         return obs.reshape(self.num_agents, self.observation_size)
 
     def get_reward(self, state: State, actions: ArrayLike, new_state: State) -> Array:
+        reward_components = self.get_reward_components(state, actions, new_state)
+        return reward_components["total"].reshape(-1, 1)
+
+    def get_reward_components(
+        self, state: State, actions: ArrayLike, new_state: State
+    ) -> dict[str, Array]:
         old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
         on_goal = new_goal_dist < (
             self.map_generator.goal_rad if self.homogeneous_goals else new_state.sizes.goal_rad
         )
 
-        r = (
-            +0.5 * on_goal.astype(jnp.float32)
-            + 0.5 * on_goal.all(axis=-1).astype(jnp.float32)
-            - 1.0 * new_state.is_collision.astype(jnp.float32)
-            + self.pos_shaping_factor * (old_goal_dist - new_goal_dist)
+        goal_progress = self.pos_shaping_factor * (old_goal_dist - new_goal_dist)
+        goal_bonus = 0.5 * on_goal.astype(jnp.float32)
+        team_bonus = (
+            0.5
+            * on_goal.all(axis=-1).astype(jnp.float32)
+            * jnp.ones_like(goal_progress)
         )
-        return r.reshape(-1, 1)
+        collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
+        total = goal_bonus + team_bonus + collision_penalty + goal_progress
+        return {
+            "goal_progress": goal_progress,
+            "goal_bonus": goal_bonus,
+            "team_bonus": team_bonus,
+            "collision_penalty": collision_penalty,
+            "total": total,
+        }
 
     def _world_step(
         self,

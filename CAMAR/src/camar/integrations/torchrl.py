@@ -262,6 +262,14 @@ class CamarWrapper(_EnvWrapper):
                 "flowtime": flowtime,
                 "makespan": makespan,
                 "coordination": coordination,
+                "info": TensorDict(
+                    {
+                        key: _ndarray_to_tensor(value)
+                        for key, value in info.items()
+                    },
+                    batch_size=self.batch_size,
+                    device=self.device,
+                ),
             },
             batch_size=self.batch_size,
             device=self.device,
