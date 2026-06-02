@@ -48,8 +48,6 @@ class Logger:
         self.model_name = model_name
         self.group_map = group_map
         self.seed = seed
-        self._reward_ema: Optional[float] = None
-        self._reward_ema_alpha: float = 0.05
 
         if experiment_config.create_json:
             self.json_writer = JsonWriter(
@@ -121,7 +119,6 @@ class Logger:
     ) -> float:
         to_log = {}
         groups_episode_rewards = []
-        groups_step_rewards = []
         gobal_done = self._get_global_done(batch)  # Does not have agent dim
         any_episode_ended = gobal_done.nonzero().numel() > 0
         if not any_episode_ended:
@@ -131,7 +128,6 @@ class Logger:
                 "The episodes will probably terminate in a future iteration."
             )
         for group in self.group_map.keys():
-            groups_step_rewards.append(self._get_reward(group, batch).mean().item())
             group_episode_rewards = self._log_individual_and_group_rewards(
                 group,
                 batch,
@@ -152,25 +148,7 @@ class Logger:
                         for key, value in batch.get(("next", group, "info")).items()
                     }
                 )
-        info_td = batch.get(("next", "info"), None)
-        if info_td is not None:
-            to_log.update(
-                {
-                    f"collection/info/{key}": value.to(torch.float).mean().item()
-                    for key, value in info_td.items()
-                }
-            )
         to_log.update(task.log_info(batch))
-        step_reward_mean = float(np.mean(groups_step_rewards))
-        if self._reward_ema is None:
-            self._reward_ema = step_reward_mean
-        else:
-            self._reward_ema = (
-                self._reward_ema_alpha * step_reward_mean
-                + (1.0 - self._reward_ema_alpha) * self._reward_ema
-            )
-        to_log["collection/reward/step_mean"] = step_reward_mean
-        to_log["collection/reward/step_ema"] = self._reward_ema
         # global_episode_rewards has shape (n_episodes) as we took the mean over groups
         global_episode_rewards = self._log_global_episode_reward(
             groups_episode_rewards, to_log, prefix="collection"

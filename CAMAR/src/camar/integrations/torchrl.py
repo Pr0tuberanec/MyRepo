@@ -122,10 +122,10 @@ class CamarWrapper(_EnvWrapper):
             reward_goal_progress_mean=Unbounded(
                 shape=(*self.batch_size,), device=self.device
             ),
-            reward_goal_bonus_mean=Unbounded(
+            reward_goal_bonus_count=Unbounded(
                 shape=(*self.batch_size,), device=self.device
             ),
-            reward_team_bonus_mean=Unbounded(
+            reward_team_bonus_count=Unbounded(
                 shape=(*self.batch_size,), device=self.device
             ),
             reward_collision_penalty_mean=Unbounded(
@@ -236,10 +236,10 @@ class CamarWrapper(_EnvWrapper):
                 "reward_goal_progress_mean": torch.zeros(
                     *self.batch_size, device=self.device
                 ),
-                "reward_goal_bonus_mean": torch.zeros(
+                "reward_goal_bonus_count": torch.zeros(
                     *self.batch_size, device=self.device
                 ),
-                "reward_team_bonus_mean": torch.zeros(
+                "reward_team_bonus_count": torch.zeros(
                     *self.batch_size, device=self.device
                 ),
                 "reward_collision_penalty_mean": torch.zeros(

@@ -201,8 +201,12 @@ class Camar:
         reward = reward_components["total"].reshape(-1, 1)
         info = {
             "reward_goal_progress_mean": reward_components["goal_progress"].mean(),
-            "reward_goal_bonus_mean": reward_components["goal_bonus"].mean(),
-            "reward_team_bonus_mean": reward_components["team_bonus"].mean(),
+            "reward_goal_bonus_count": (
+                reward_components["goal_bonus"] > 0
+            ).astype(jnp.float32).sum(),
+            "reward_team_bonus_count": (
+                reward_components["team_bonus"] > 0
+            ).astype(jnp.float32).sum(),
             "reward_collision_penalty_mean": reward_components["collision_penalty"].mean(),
             "reward_total_mean": reward_components["total"].mean(),
         }
