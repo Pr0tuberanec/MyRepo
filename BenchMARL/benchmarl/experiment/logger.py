@@ -152,11 +152,12 @@ class Logger:
                         for key, value in batch.get(("next", group, "info")).items()
                     }
                 )
-        if "info" in batch.keys():
+        info_td = batch.get(("next", "info"), None)
+        if info_td is not None:
             to_log.update(
                 {
                     f"collection/info/{key}": value.to(torch.float).mean().item()
-                    for key, value in batch.get(("next", "info")).items()
+                    for key, value in info_td.items()
                 }
             )
         to_log.update(task.log_info(batch))
