@@ -226,12 +226,37 @@ class CamarWrapper(_EnvWrapper):
 
         done = self._state.on_goal.all(axis=-1)
         done = _ndarray_to_tensor(done)
+        zero_info = TensorDict(
+            source={
+                "on_goal_rate": torch.zeros(*self.batch_size, device=self.device),
+                "on_goal_count": torch.zeros(*self.batch_size, device=self.device),
+                "collision_count_step": torch.zeros(
+                    *self.batch_size, device=self.device
+                ),
+                "reward_goal_progress_mean": torch.zeros(
+                    *self.batch_size, device=self.device
+                ),
+                "reward_goal_bonus_mean": torch.zeros(
+                    *self.batch_size, device=self.device
+                ),
+                "reward_team_bonus_mean": torch.zeros(
+                    *self.batch_size, device=self.device
+                ),
+                "reward_collision_penalty_mean": torch.zeros(
+                    *self.batch_size, device=self.device
+                ),
+                "reward_total_mean": torch.zeros(*self.batch_size, device=self.device),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
 
         tensordict_out = TensorDict(
             source={
                 "agents": tensordict_agents,
                 "done": done,
                 "terminated": done.clone(),
+                "info": zero_info,
             },
             batch_size=self.batch_size,
             device=self.device,
