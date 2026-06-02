@@ -305,6 +305,7 @@ class Camar:
             "total": total,
         }
 
+
     def _world_step(
         self,
         key: ArrayLike,
