@@ -37,7 +37,7 @@ class HyperLSTMCell(nn.Module):
         # Вход: [h_{t-1}; x_t], размер hidden+input → hyper_size
         # Из авторской реализации: x_hat = cat(h, x); h_hat = hyper(x_hat)
         # layer_norm=True: как в авторской реализации — стабилизирует hyper-LSTM
-        self.hyper_cell = LSTMCell(hidden_size + input_size, hyper_size, bias=bias, layer_norm=True)
+        self.hyper_cell = LSTMCell(hidden_size + input_size, hyper_size, bias=bias)
 
         # --- проекции h_hat → z для 4 gate (i,f,g,o) одной линейкой ---
         # Из авторской реализации: z_h = W_zh * h_hat, потом chunk(4)
