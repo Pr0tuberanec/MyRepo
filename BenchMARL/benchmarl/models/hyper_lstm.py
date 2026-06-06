@@ -5,6 +5,7 @@ from typing import Optional, Sequence, Type
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, unravel_key_list
 from torchrl.data.tensor_specs import Composite, Unbounded
@@ -39,73 +40,67 @@ class HyperLSTMCell(nn.Module):
         # layer_norm=True: как в авторской реализации — стабилизирует hyper-LSTM
         self.hyper_cell = LSTMCell(hidden_size + input_size, hyper_size, bias=bias)
 
-        # --- проекции h_hat → z для 4 gate (i,f,g,o) одной линейкой ---
-        # Из авторской реализации: z_h = W_zh * h_hat, потом chunk(4)
-        # bias=False: согласно статье, bias не нужен на этом шаге
+        self.n_z = n_z
+
+        # --- проекции h_hat → z для 4 gate одной линейкой ---
         self.z_h = nn.Linear(hyper_size, 4 * n_z, bias=True)
         self.z_x = nn.Linear(hyper_size, 4 * n_z, bias=True)
         self.z_b = nn.Linear(hyper_size, 4 * n_z, bias=False)
 
-        # --- генераторы масштабирования z → d (по одному на gate) ---
-        # d_h, d_x: bias=False — масштабируют строки W_h, W_x
-        # d_b: bias=True — заменяет стандартный bias основного LSTM
+        # --- генераторы масштабирования z → d (nn.Linear — auto-init) ---
         self.d_h = nn.ModuleList([nn.Linear(n_z, hidden_size, bias=False) for _ in range(4)])
         self.d_x = nn.ModuleList([nn.Linear(n_z, hidden_size, bias=False) for _ in range(4)])
         self.d_b = nn.ModuleList([nn.Linear(n_z, hidden_size, bias=True)  for _ in range(4)])
 
-        # --- основные матрицы весов главного LSTM (без bias) ---
-        # Из авторской реализации: W_h (hidden×hidden), W_x (hidden×input)
-        # bias отсутствует намеренно — его роль играет d_b выше
-        # 4 матрицы на 4 gate: i (input), f (forget), g (cell), o (output)
-        self.w_h = nn.ParameterList(
-            [nn.Parameter(torch.empty(hidden_size, hidden_size)) for _ in range(4)]
-        )
-        self.w_x = nn.ParameterList(
-            [nn.Parameter(torch.empty(hidden_size, input_size)) for _ in range(4)]
-        )
+        # --- основные матрицы: один Parameter (4*H, H) вместо ParameterList ---
+        # Это позволяет один F.linear вместо 4 einsum без torch.cat на каждый шаг
         k = hidden_size ** -0.5
-        for w in self.w_h:
-            nn.init.uniform_(w, -k, k)
-        for w in self.w_x:
-            nn.init.uniform_(w, -k, k)
+        self.w_h = nn.Parameter(torch.empty(4 * hidden_size, hidden_size))
+        self.w_x = nn.Parameter(torch.empty(4 * hidden_size, input_size))
+        nn.init.uniform_(self.w_h, -k, k)
+        nn.init.uniform_(self.w_x, -k, k)
 
-        # LayerNorm на каждый gate и отдельно на c_next
-        # Из авторской реализации — стабилизирует динамически масштабированные активации
+        # --- LayerNorm на каждый gate и c_next ---
         self.layer_norm   = nn.ModuleList([nn.LayerNorm(hidden_size) for _ in range(4)])
         self.layer_norm_c = nn.LayerNorm(hidden_size)
 
     def forward(self, x, h, c, h_hat, c_hat):
         # x:(B,in), h/c:(B,hidden), h_hat/c_hat:(B,hyper)
+        B, H = h.shape
 
-        # Шаг 1: малый LSTM получает конкатенацию [h_{t-1}; x_t]
-        # Из авторской: x_hat = cat(h, x); h_hat, c_hat = hyper(x_hat, h_hat, c_hat)
+        # Шаг 1: hyper-LSTM
         x_hat = torch.cat([h, x], dim=-1)
         h_hat, c_hat = self.hyper_cell(x_hat, (h_hat, c_hat))
 
-        # Шаг 2: проецируем h_hat → z, chunk разбивает на 4 части (по gate)
-        # Из авторской: z_h = W_zh * h_hat, потом chunk(4)
-        z_h = self.z_h(h_hat).chunk(4, dim=-1)
-        z_x = self.z_x(h_hat).chunk(4, dim=-1)
-        z_b = self.z_b(h_hat).chunk(4, dim=-1)
+        # Шаг 2: z-проекции → (B, 4, n_z) через view
+        z_h = self.z_h(h_hat).view(B, 4, self.n_z)
+        z_x = self.z_x(h_hat).view(B, 4, self.n_z)
+        z_b = self.z_b(h_hat).view(B, 4, self.n_z)
 
-        # Шаг 3: для каждого gate считаем scaled pre-activation
-        # gate_i = LN( d_h⊙(W_h h) + d_x⊙(W_x x) + d_b )
-        # ⊙ — поэлементное умножение (масштабирование строк W)
-        ifgo = []
-        for i in range(4):
-            d_h_i = self.d_h[i](z_h[i])          # (B, hidden)
-            d_x_i = self.d_x[i](z_x[i])          # (B, hidden)
-            y = (
-                d_h_i * torch.einsum("ij,bj->bi", self.w_h[i], h)
-                + d_x_i * torch.einsum("ij,bj->bi", self.w_x[i], x)
-                + self.d_b[i](z_b[i])
-            )
-            ifgo.append(self.layer_norm[i](y))
+        # Шаг 3: d-проекции — стакуем веса nn.Linear для batched matmul
+        # d_h[i].weight: (H, n_z); stack → (4, H, n_z); einsum "bgi,gHi->bgH"
+        d_h = torch.einsum("bgi,gHi->bgH", z_h, torch.stack([l.weight for l in self.d_h]))
+        d_x = torch.einsum("bgi,gHi->bgH", z_x, torch.stack([l.weight for l in self.d_x]))
+        d_b = (torch.einsum("bgi,gHi->bgH", z_b, torch.stack([l.weight for l in self.d_b]))
+               + torch.stack([l.bias for l in self.d_b]))  # (B, 4, H) + (4, H)
 
-        # Стандартные LSTM-уравнения — как у авторов и в lstm.py
-        i_g, f_g, g_g, o_g = ifgo
-        c_next = torch.sigmoid(f_g) * c + torch.sigmoid(i_g) * torch.tanh(g_g)
-        h_next = torch.sigmoid(o_g) * torch.tanh(self.layer_norm_c(c_next))
+        # Шаг 4: основные matmul — один F.linear (w_h уже (4*H, H))
+        wh_out = F.linear(h, self.w_h).view(B, 4, H)   # (B, 4*H) → (B, 4, H)
+        wx_out = F.linear(x, self.w_x).view(B, 4, H)
+
+        # Шаг 5: scaled pre-activations — все gate сразу
+        y = d_h * wh_out + d_x * wx_out + d_b   # (B, 4, H)
+
+        # Шаг 6: LayerNorm — стакуем параметры для векторизованного LN
+        ln_w = torch.stack([ln.weight for ln in self.layer_norm])   # (4, H)
+        ln_b = torch.stack([ln.bias   for ln in self.layer_norm])
+        mean = y.mean(-1, keepdim=True)
+        var  = y.var(-1, unbiased=False, keepdim=True)
+        y    = (y - mean) * (var + 1e-5).rsqrt() * ln_w + ln_b     # (B, 4, H)
+        # LSTM-уравнения
+        i_g, f_g, g_g, o_g = y.unbind(dim=1)   # each (B, H)
+        c_next = f_g.sigmoid() * c + i_g.sigmoid() * g_g.tanh()
+        h_next = o_g.sigmoid() * self.layer_norm_c(c_next).tanh()
 
         return h_next, c_next, h_hat, c_hat
 
