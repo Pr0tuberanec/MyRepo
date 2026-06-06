@@ -184,11 +184,9 @@ class HyperLSTM(torch.nn.Module):
         )
 
 
-def _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, device):
-    """Фабричная функция — аналог get_net() в lstm.py:85.
-    Без compile: HyperLSTM содержит динамические веса, torch.compile здесь нецелесообразен.
-    """
-    return HyperLSTM(
+def _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, device, compile):
+    """Фабричная функция — аналог get_net() в lstm.py:85."""
+    net = HyperLSTM(
         input_size=input_size,
         hidden_size=hidden_size,
         hyper_size=hyper_size,
@@ -197,6 +195,9 @@ def _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, dev
         bias=bias,
         device=device,
     )
+    if compile:
+        net = torch.compile(net, mode="reduce-overhead")
+    return net
 
 
 class MultiAgentHyperLSTM(torch.nn.Module):
@@ -218,6 +219,7 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         share_params: bool,
         n_layers: int,
         bias: bool,
+        compile: bool,
     ):
         super().__init__()
         self.input_size = input_size
@@ -229,6 +231,7 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         self.share_params = share_params
         self.n_layers = n_layers
         self.bias = bias
+        self.compile = compile
 
         # Centralised critic: concat obs всех агентов — из lstm.py:125-126
         if self.centralised:
@@ -236,7 +239,7 @@ class MultiAgentHyperLSTM(torch.nn.Module):
 
         # Создаём сети: одну (share_params) или по одной на агента — из lstm.py:128-139
         agent_networks = [
-            _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, device)
+            _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, device, compile)
             for _ in range(self.n_agents if not self.share_params else 1)
         ]
         self._make_params(agent_networks)
@@ -245,7 +248,7 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         # meta-device не выделяет память, нужен только граф вычислений для vmap
         with torch.device("meta"):
             self._empty_net = _get_hyper_net(
-                input_size, hidden_size, hyper_size, n_z, n_layers, bias, "meta"
+                input_size, hidden_size, hyper_size, n_z, n_layers, bias, "meta", compile
             )
             TensorDict.from_module(self._empty_net).data.to("meta").to_module(self._empty_net)
 
@@ -383,6 +386,7 @@ class HyperLstm(Model):
         n_z: int,
         n_layers: int,
         bias: bool,
+        compile: bool,
         **kwargs,
     ):
         # Из lstm.py:316-328: передаём все BenchMARL-параметры в базовый Model
@@ -405,6 +409,7 @@ class HyperLstm(Model):
         self.n_z         = n_z
         self.n_layers    = n_layers
         self.bias        = bias
+        self.compile     = compile
 
         # 4 ключа hidden вместо 2 в lstm.py:330-337
         # h/c — основной LSTM, h_hat/c_hat — hyper-LSTM
@@ -440,6 +445,7 @@ class HyperLstm(Model):
                 share_params=self.share_params,
                 n_layers=self.n_layers,
                 bias=self.bias,
+                compile=self.compile,
             )
         else:
             # Глобальный вход (критик без agent-dim) — из lstm.py:368-382
@@ -453,6 +459,7 @@ class HyperLstm(Model):
                         self.n_layers,
                         self.bias,
                         self.device,
+                        self.compile,
                     )
                     for _ in range(self.n_agents if not self.share_params else 1)
                 ]
@@ -595,6 +602,7 @@ class HyperLstmConfig(ModelConfig):
     n_z:         int = MISSING
     n_layers:    int = MISSING
     bias:       bool = MISSING
+    compile:    bool = MISSING
 
     mlp_num_cells:        Sequence[int]    = MISSING
     mlp_layer_class:      Type[nn.Module]  = MISSING

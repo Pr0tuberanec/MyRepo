@@ -5,6 +5,7 @@ hyper_size: 16
 n_z: 4
 n_layers: 1
 bias: True
+compile: True
 
 mlp_num_cells: [256, 256]
 mlp_layer_class: torch.nn.Linear
