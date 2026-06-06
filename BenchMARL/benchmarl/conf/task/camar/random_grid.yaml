@@ -1,7 +1,7 @@
 map_generator: "random_grid"
-dynamic: "DiffDriveDynamic"
-use_gire: false # Set to true when running GIRE algorithms to add h_0 and is_init transforms
+dynamic: "HolonomicDynamic"
 lifelong: false
+use_gire: false
 window: 0.3
 max_steps: 1000
 frameskip: 15
@@ -18,9 +18,8 @@ map_kwargs:
   grain_factor: 3
 
 dynamic_kwargs:
-  linear_speed_max: 1.0
-  linear_speed_min: -1.0
-  angular_speed_max: 2.0
-  angular_speed_min: -2.0
+  accel: 5.0
+  max_speed: 6.0
+  damping: 0.25
   mass: 1.0
   dt: 0.01

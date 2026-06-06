@@ -15,6 +15,7 @@ from .common import (
 from .deepsets import Deepsets, DeepsetsConfig
 from .gnn import Gnn, GnnConfig
 from .gru import Gru, GruConfig
+from .hyper_lstm import HyperLstm, HyperLstmConfig
 from .lstm import Lstm, LstmConfig
 from .mlp import Mlp, MlpConfig
 
@@ -29,6 +30,8 @@ classes = [
     "DeepsetsConfig",
     "Gru",
     "GruConfig",
+    "HyperLstm",
+    "HyperLstmConfig",
     "Lstm",
     "LstmConfig",
 ]
@@ -39,5 +42,6 @@ model_config_registry = {
     "cnn": CnnConfig,
     "deepsets": DeepsetsConfig,
     "gru": GruConfig,
+    "hyper_lstm": HyperLstmConfig,
     "lstm": LstmConfig,
 }
