@@ -63,6 +63,11 @@ class HyperLSTMCell(nn.Module):
         self.w_x = nn.ParameterList(
             [nn.Parameter(torch.empty(hidden_size, input_size)) for _ in range(4)]
         )
+        k = hidden_size ** -0.5
+        for w in self.w_h:
+            nn.init.uniform_(w, -k, k)
+        for w in self.w_x:
+            nn.init.uniform_(w, -k, k)
 
         # LayerNorm на каждый gate и отдельно на c_next
         # Из авторской реализации — стабилизирует динамически масштабированные активации
