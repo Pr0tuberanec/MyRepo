@@ -295,7 +295,7 @@ class Camar:
         goal_progress = self.pos_shaping_factor * (old_goal_dist - new_goal_dist)
         goal_bonus = 0.5 * on_goal.astype(jnp.float32)
         team_bonus = (
-            0.5
+            1.0
             * on_goal.all(axis=-1).astype(jnp.float32)
             * jnp.ones_like(goal_progress)
         )
