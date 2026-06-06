@@ -87,8 +87,10 @@ class CamarClass(TaskClass):
     def state_spec(self, env: EnvBase) -> Optional[Composite]:
         obs_shape = env.observation_spec["agents", "observation"].shape
         n_agents, obs_dim = obs_shape[-2], obs_shape[-1]
+
         return Composite(
-            {"state": Unbounded(shape=(n_agents * (obs_dim + 5),), device=env.device)},
+            {"state": Unbounded(shape=(n_agents * obs_dim,), device=env.device)},
+            # {"state": Unbounded(shape=(n_agents * (obs_dim + 5),), device=env.device)},  # with phys_state
             device=env.device,
         )
 

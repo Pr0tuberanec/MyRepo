@@ -135,10 +135,10 @@ class CamarWrapper(_EnvWrapper):
             shape=self.batch_size,
             device=self.device,
         )
-        agents_observation["phys_state"] = Unbounded(
-            shape=(*self.batch_size, env.num_agents, 5),
-            device=self.device,
-        )
+        # agents_observation["phys_state"] = Unbounded(
+        #     shape=(*self.batch_size, env.num_agents, 5),
+        #     device=self.device,
+        # )
         self.observation_spec = Composite(
             agents=agents_observation,
             info=info_spec,
@@ -179,17 +179,17 @@ class CamarWrapper(_EnvWrapper):
             raise Exception("CAMAR requires an integer seed.")
         self._key = jax.random.PRNGKey(seed)
 
-    def _phys_state_tensor(self, state) -> torch.Tensor:
-        """(batch, N, 5): per-agent [pos(2), vel(2), agent_rad(1)]."""
-        jax = self.jax
-        N = self._env.num_agents
-        pos = state.physical_state.agent_pos   # (batch, N, 2)
-        vel = state.physical_state.agent_vel   # (batch, N, 2)
-        if self._env.homogeneous_agents:
-            rad = jax.numpy.full((*self.batch_size, N, 1), self._env.map_generator.agent_rad)
-        else:
-            rad = state.sizes.agent_rad[..., jax.numpy.newaxis]  # (batch, N, 1)
-        return _ndarray_to_tensor(jax.numpy.concatenate([pos, vel, rad], axis=-1))
+    # def _phys_state_tensor(self, state) -> torch.Tensor:
+    #     """(batch, N, 5): per-agent [pos(2), vel(2), agent_rad(1)]."""
+    #     jax = self.jax
+    #     N = self._env.num_agents
+    #     pos = state.physical_state.agent_pos   # (batch, N, 2)
+    #     vel = state.physical_state.agent_vel   # (batch, N, 2)
+    #     if self._env.homogeneous_agents:
+    #         rad = jax.numpy.full((*self.batch_size, N, 1), self._env.map_generator.agent_rad)
+    #     else:
+    #         rad = state.sizes.agent_rad[..., jax.numpy.newaxis]  # (batch, N, 1)
+    #     return _ndarray_to_tensor(jax.numpy.concatenate([pos, vel, rad], axis=-1))
 
     def _partial_reset(self, keys, state, envs_to_reset):
         obs_r, state_r = self._jit_vmap_env_reset(keys)
@@ -235,7 +235,7 @@ class CamarWrapper(_EnvWrapper):
         tensordict_agents = TensorDict(
             source={
                 "observation": _ndarray_to_tensor(obs),
-                "phys_state": self._phys_state_tensor(self._state),
+                # "phys_state": self._phys_state_tensor(self._state),
             },
             batch_size=(*self.batch_size, self._env.num_agents),
             device=self.device,
@@ -304,7 +304,7 @@ class CamarWrapper(_EnvWrapper):
                 "observation": _ndarray_to_tensor(obs),
                 "reward": _ndarray_to_tensor(reward),
                 "on_goal": _ndarray_to_tensor(self._state.on_goal).view(*self.batch_size, -1, 1),
-                "phys_state": self._phys_state_tensor(self._state),
+                # "phys_state": self._phys_state_tensor(self._state),
             },
             batch_size=(*self.batch_size, self._env.num_agents),
             device=self.device,
