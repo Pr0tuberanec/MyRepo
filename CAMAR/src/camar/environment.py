@@ -298,7 +298,7 @@ class Camar:
 
         goal_progress = self.pos_shaping_factor * (state.min_goal_dist - new_goal_dist)   
         # Мягкая награда за близость к цели: r_g * clip((1 - d_g) / Rad_g, 0, 1)
-        goal_bonus = 0.5 * jnp.clip((1.0 - new_goal_dist) / goal_rad, 0.0, 1.0)
+        goal_bonus = 0.5 * jnp.clip(1.0 - new_goal_dist / goal_rad, 0.0, 1.0)
         team_bonus = (
             1.0
             * on_goal.all(axis=-1).astype(jnp.float32)
