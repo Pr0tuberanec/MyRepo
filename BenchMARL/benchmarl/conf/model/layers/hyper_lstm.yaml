@@ -14,5 +14,5 @@ mlp_activation_kwargs: null
 mlp_norm_class: null
 mlp_norm_kwargs: null
 
-hyper_use_global_state: True
-global_state_size: 64
+hyper_use_global_state: False
+global_state_size: 0
