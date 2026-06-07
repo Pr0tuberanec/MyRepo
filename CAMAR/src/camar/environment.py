@@ -290,14 +290,15 @@ class Camar:
     def get_reward_components(
         self, state: State, actions: ArrayLike, new_state: State
     ) -> dict[str, Array]:
+        old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
         goal_rad = (
             self.map_generator.goal_rad if self.homogeneous_goals else new_state.sizes.goal_rad
         )
         on_goal = new_goal_dist < goal_rad
 
-        goal_progress = self.pos_shaping_factor * (state.min_goal_dist - new_goal_dist)   
-        # Мягкая награда за близость к цели: r_g * clip((1 - d_g) / Rad_g, 0, 1)
+        goal_progress = self.pos_shaping_factor * (old_goal_dist - new_goal_dist)   
+        # Мягкая награда за близость к цели: r_g * clip(1 - d_g / Rad_g, 0, 1)
         goal_bonus = 0.5 * jnp.clip(1.0 - new_goal_dist / goal_rad, 0.0, 1.0)
         team_bonus = (
             1.0
