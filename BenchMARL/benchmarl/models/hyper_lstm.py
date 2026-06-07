@@ -14,6 +14,9 @@ from torchrl.modules import LSTMCell, MLP, MultiAgentMLP
 from benchmarl.models.common import Model, ModelConfig
 from benchmarl.utils import DEVICE_TYPING
 
+# Ключ глобального состояния в TensorDict (CAMAR: concat(local_obs))
+GLOBAL_STATE_KEY = "state"
+
 
 class HyperLSTMCell(nn.Module):
     """Weight-scaling HyperLSTM cell (Ha et al., 2016).
@@ -29,16 +32,20 @@ class HyperLSTMCell(nn.Module):
         hyper_size: int,
         n_z: int,
         bias: bool = True,
+        hyper_global_state_size: int = 0,
     ):
         super().__init__()
         self.hidden_size = hidden_size
         self.hyper_size = hyper_size
 
         # --- малый LSTM (hyper-network) ---
-        # Вход: [h_{t-1}; x_t], размер hidden+input → hyper_size
-        # Из авторской реализации: x_hat = cat(h, x); h_hat = hyper(x_hat)
-        # layer_norm=True: как в авторской реализации — стабилизирует hyper-LSTM
-        self.hyper_cell = LSTMCell(hidden_size + input_size, hyper_size, bias=bias)
+        # По умолчанию вход [h; x]. При hyper_use_global_state — [h; global_state].
+        hyper_cell_input_size = (
+            hyper_global_state_size if hyper_global_state_size > 0 else input_size
+        )
+        self.hyper_cell = LSTMCell(
+            hidden_size + hyper_cell_input_size, hyper_size, bias=bias
+        )
 
         self.n_z = n_z
 
@@ -64,12 +71,14 @@ class HyperLSTMCell(nn.Module):
         self.layer_norm   = nn.ModuleList([nn.LayerNorm(hidden_size) for _ in range(4)])
         self.layer_norm_c = nn.LayerNorm(hidden_size)
 
-    def forward(self, x, h, c, h_hat, c_hat):
+    def forward(self, x, h, c, h_hat, c_hat, global_state=None):
         # x:(B,in), h/c:(B,hidden), h_hat/c_hat:(B,hyper)
+        # global_state: если задан, подаётся в hyper-ветку вместо x
         B, H = h.shape
 
-        # Шаг 1: hyper-LSTM
-        x_hat = torch.cat([h, x], dim=-1)
+        # Шаг 1: hyper-LSTM — вход [h; global_state] или [h; x]
+        hyper_cell_input = global_state if global_state is not None else x
+        x_hat = torch.cat([h, hyper_cell_input], dim=-1)
         h_hat, c_hat = self.hyper_cell(x_hat, (h_hat, c_hat))
 
         # Шаг 2: z-проекции → (B, 4, n_z) через view
@@ -122,6 +131,7 @@ class HyperLSTM(torch.nn.Module):
         bias: bool,
         device: DEVICE_TYPING,
         time_dim: int = -2,
+        hyper_global_state_size: int = 0,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -139,12 +149,13 @@ class HyperLSTM(torch.nn.Module):
                     hyper_size,
                     n_z,
                     bias,
+                    hyper_global_state_size=hyper_global_state_size,
                 )
                 for i in range(n_layers)
             ]
         ).to(device)
 
-    def forward(self, input, is_init, h, c, h_hat, c_hat):
+    def forward(self, input, is_init, h, c, h_hat, c_hat, global_state=None):
         # h, c:         (B, n_layers, hidden_size)
         # h_hat, c_hat: (B, n_layers, hyper_size)
         # is_init:      (B, seq, n_agents, 1) — уже expand-нут снаружи
@@ -156,8 +167,17 @@ class HyperLSTM(torch.nn.Module):
         c_hat = list(c_hat.unbind(dim=-2))
 
         hs = []
+        global_state_steps = (
+            global_state.unbind(self.time_dim)
+            if global_state is not None
+            else [None] * input.shape[self.time_dim]
+        )
         # Цикл по шагам времени — аналог lstm.py:63-77
-        for in_t, init_t in zip(input.unbind(self.time_dim), is_init.unbind(self.time_dim)):
+        for in_t, init_t, global_state_t in zip(
+            input.unbind(self.time_dim),
+            is_init.unbind(self.time_dim),
+            global_state_steps,
+        ):
             for layer in range(self.n_layers):
                 # Сброс hidden при начале нового эпизода — из lstm.py:67-68
                 # Расширено на h_hat/c_hat: они тоже должны сбрасываться
@@ -168,7 +188,12 @@ class HyperLSTM(torch.nn.Module):
 
                 # Шаг ячейки — аналог lstm.py:70, но возвращает 4 состояния
                 h[layer], c[layer], h_hat[layer], c_hat[layer] = self.cells[layer](
-                    in_t, h[layer], c[layer], h_hat[layer], c_hat[layer]
+                    in_t,
+                    h[layer],
+                    c[layer],
+                    h_hat[layer],
+                    c_hat[layer],
+                    global_state=global_state_t,
                 )
                 in_t = h[layer]
 
@@ -184,7 +209,17 @@ class HyperLSTM(torch.nn.Module):
         )
 
 
-def _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, device, compile):
+def _get_hyper_net(
+    input_size,
+    hidden_size,
+    hyper_size,
+    n_z,
+    n_layers,
+    bias,
+    device,
+    compile,
+    hyper_global_state_size=0,
+):
     """Фабричная функция — аналог get_net() в lstm.py:85."""
     net = HyperLSTM(
         input_size=input_size,
@@ -194,6 +229,7 @@ def _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, dev
         n_layers=n_layers,
         bias=bias,
         device=device,
+        hyper_global_state_size=hyper_global_state_size,
     )
     if compile:
         net = torch.compile(net, mode="reduce-overhead")
@@ -220,6 +256,8 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         n_layers: int,
         bias: bool,
         compile: bool,
+        hyper_use_global_state: bool = False,
+        global_state_size: int = 0,
     ):
         super().__init__()
         self.input_size = input_size
@@ -232,6 +270,9 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         self.n_layers = n_layers
         self.bias = bias
         self.compile = compile
+        self.hyper_use_global_state = hyper_use_global_state
+        # hyper_global_state_size: размерность global_state для hyper-ветки (0 → fallback на x)
+        hyper_global_state_size = global_state_size if hyper_use_global_state else 0
 
         # Centralised critic: concat obs всех агентов — из lstm.py:125-126
         if self.centralised:
@@ -239,7 +280,17 @@ class MultiAgentHyperLSTM(torch.nn.Module):
 
         # Создаём сети: одну (share_params) или по одной на агента — из lstm.py:128-139
         agent_networks = [
-            _get_hyper_net(input_size, hidden_size, hyper_size, n_z, n_layers, bias, device, compile)
+            _get_hyper_net(
+                input_size,
+                hidden_size,
+                hyper_size,
+                n_z,
+                n_layers,
+                bias,
+                device,
+                compile,
+                hyper_global_state_size=hyper_global_state_size,
+            )
             for _ in range(self.n_agents if not self.share_params else 1)
         ]
         self._make_params(agent_networks)
@@ -248,7 +299,15 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         # meta-device не выделяет память, нужен только граф вычислений для vmap
         with torch.device("meta"):
             self._empty_net = _get_hyper_net(
-                input_size, hidden_size, hyper_size, n_z, n_layers, bias, "meta", compile
+                input_size,
+                hidden_size,
+                hyper_size,
+                n_z,
+                n_layers,
+                bias,
+                "meta",
+                compile,
+                hyper_global_state_size=hyper_global_state_size,
             )
             TensorDict.from_module(self._empty_net).data.to("meta").to_module(self._empty_net)
 
@@ -260,7 +319,7 @@ class MultiAgentHyperLSTM(torch.nn.Module):
         else:
             self.params = TensorDict.from_modules(*agent_networks, as_module=True)
 
-    def forward(self, input, is_init, h_0=None, c_0=None, h_hat_0=None, c_hat_0=None):
+    def forward(self, input, is_init, h_0=None, c_0=None, h_hat_0=None, c_hat_0=None, global_state=None):
         # Структура полностью из lstm.py:157-239, расширена на h_hat/c_hat
 
         assert is_init is not None
@@ -278,10 +337,14 @@ class MultiAgentHyperLSTM(torch.nn.Module):
             h_hat_0 = h_hat_0.unsqueeze(0)
             c_hat_0 = c_hat_0.unsqueeze(0)
             is_init = is_init.unsqueeze(0)
+            if global_state is not None:
+                global_state = global_state.unsqueeze(0)
 
         # При сборе данных эмулируем seq-dimension — из lstm.py:181-184
         if not training:
             input = input.unsqueeze(1)
+            if global_state is not None:
+                global_state = global_state.unsqueeze(1)
 
         batch = input.shape[0]
         seq   = input.shape[1]
@@ -317,7 +380,7 @@ class MultiAgentHyperLSTM(torch.nn.Module):
             input   = input.view(batch, seq, self.n_agents * self.input_size)
             is_init = is_init[..., 0, :]  # агентская dim не нужна для centralised
 
-        output, h_n, c_n, h_hat_n, c_hat_n = self._run_net(input, is_init, h_0, c_0, h_hat_0, c_hat_0)
+        output, h_n, c_n, h_hat_n, c_hat_n = self._run_net(input, is_init, h_0, c_0, h_hat_0, c_hat_0, global_state)
 
         if self.centralised and self.share_params:
             # Один выход на всех агентов → broadcast — из lstm.py:228-231
@@ -334,33 +397,33 @@ class MultiAgentHyperLSTM(torch.nn.Module):
 
         return output, h_n, c_n, h_hat_n, c_hat_n
 
-    def _run_net(self, input, is_init, h_0, c_0, h_hat_0, c_hat_0):
+    def _run_net(self, input, is_init, h_0, c_0, h_hat_0, c_hat_0, global_state=None):
         # Аналог run_net (lstm.py:241-266), расширен на h_hat/c_hat
         # vmap позволяет прогнать одну сеть (_empty_net) с разными весами для каждого агента
+        # global_state не имеет agent-dim → in_dims=None (broadcast по агентам)
         if not self.share_params:
-            # in_dims: (params=0, input=-2, is_init=-2, h=-3, c=-3, h_hat=-3, c_hat=-3)
-            # -2 = agent dim в input/is_init; -3 = agent dim в hidden (batch,agent,layer,size)
+            # in_dims: (..., global_state=None) — global_state broadcast на агентов
             if self.centralised:
-                in_dims  = (0, None, None, -3, -3, -3, -3)
+                in_dims  = (0, None, None, -3, -3, -3, -3, None)
             else:
-                in_dims  = (0, -2, -2, -3, -3, -3, -3)
+                in_dims  = (0, -2, -2, -3, -3, -3, -3, None)
             out_dims = (-2, -3, -3, -3, -3)
             output, h_n, c_n, h_hat_n, c_hat_n = self._vmap_func_module(
                 self._empty_net, in_dims, out_dims
-            )(self.params, input, is_init, h_0, c_0, h_hat_0, c_hat_0)
+            )(self.params, input, is_init, h_0, c_0, h_hat_0, c_hat_0, global_state)
         else:
             # share_params: веса одни, vmap только по agent dim входов — из lstm.py:255-264
             with self.params.to_module(self._empty_net):
                 if self.centralised:
                     output, h_n, c_n, h_hat_n, c_hat_n = self._empty_net(
-                        input, is_init, h_0, c_0, h_hat_0, c_hat_0
+                        input, is_init, h_0, c_0, h_hat_0, c_hat_0, global_state
                     )
                 else:
                     output, h_n, c_n, h_hat_n, c_hat_n = torch.vmap(
                         self._empty_net,
-                        in_dims=(-2, -2, -3, -3, -3, -3),
+                        in_dims=(-2, -2, -3, -3, -3, -3, None),
                         out_dims=(-2, -3, -3, -3, -3),
-                    )(input, is_init, h_0, c_0, h_hat_0, c_hat_0)
+                    )(input, is_init, h_0, c_0, h_hat_0, c_hat_0, global_state)
 
         return output, h_n, c_n, h_hat_n, c_hat_n
 
@@ -387,6 +450,8 @@ class HyperLstm(Model):
         n_layers: int,
         bias: bool,
         compile: bool,
+        hyper_use_global_state: bool = False,
+        global_state_size: int = 0,
         **kwargs,
     ):
         # Из lstm.py:316-328: передаём все BenchMARL-параметры в базовый Model
@@ -410,6 +475,8 @@ class HyperLstm(Model):
         self.n_layers    = n_layers
         self.bias        = bias
         self.compile     = compile
+        self.hyper_use_global_state = hyper_use_global_state
+        self.global_state_size = global_state_size
 
         # 4 ключа hidden вместо 2 в lstm.py:330-337
         # h/c — основной LSTM, h_hat/c_hat — hyper-LSTM
@@ -428,7 +495,12 @@ class HyperLstm(Model):
         ])
         self.in_keys += self.rnn_keys
 
-        # Из lstm.py:350-353
+        # Если гиперсеть использует global_state — добавляем GLOBAL_STATE_KEY в in_keys.
+        # В input_spec его нет (он не идёт в main LSTM), поэтому добавляем только в in_keys.
+        if self.hyper_use_global_state:
+            self.in_keys.append(GLOBAL_STATE_KEY)
+
+        # input_features: только obs-фичи (не global_state) — размерность входа main LSTM
         self.input_features  = sum([spec.shape[-1] for spec in self.input_spec.values(True, True)])
         self.output_features = self.output_leaf_spec.shape[-1]
 
@@ -446,6 +518,8 @@ class HyperLstm(Model):
                 n_layers=self.n_layers,
                 bias=self.bias,
                 compile=self.compile,
+                hyper_use_global_state=self.hyper_use_global_state,
+                global_state_size=self.global_state_size,
             )
         else:
             # Глобальный вход (критик без agent-dim) — из lstm.py:368-382
@@ -532,11 +606,17 @@ class HyperLstm(Model):
     def _forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Из lstm.py:446-505, расширен на h_hat/c_hat
 
-        # Concat всех входов кроме rnn_keys — из lstm.py:448-455
+        # Concat obs-входов для main LSTM: всё кроме rnn_keys и global_state
+        # global_state (если hyper_use_global_state) идёт только в hyper-ветку
         input = torch.cat(
-            [tensordict.get(in_key) for in_key in self.in_keys if in_key not in self.rnn_keys],
+            [tensordict.get(in_key) for in_key in self.in_keys
+             if in_key not in self.rnn_keys and in_key != GLOBAL_STATE_KEY],
             dim=-1,
         )
+        global_state = (
+            tensordict.get(GLOBAL_STATE_KEY) if self.hyper_use_global_state else None
+        )
+
         # Читаем 4 hidden из tensordict — из lstm.py:456-458, расширено
         h_0     = tensordict.get(self.hidden_state_name_h,     None)
         c_0     = tensordict.get(self.hidden_state_name_c,     None)
@@ -549,7 +629,7 @@ class HyperLstm(Model):
         # Из lstm.py:462-466: actor path (input_has_agent_dim=True)
         if self.input_has_agent_dim:
             output, h_n, c_n, h_hat_n, c_hat_n = self.hyper_lstm(
-                input, is_init, h_0, c_0, h_hat_0, c_hat_0
+                input, is_init, h_0, c_0, h_hat_0, c_hat_0, global_state=global_state
             )
             if not self.output_has_agent_dim:
                 output = output[..., 0, :]
@@ -611,6 +691,10 @@ class HyperLstmConfig(ModelConfig):
     mlp_activation_kwargs: Optional[dict]  = None
     mlp_norm_class:        Type[nn.Module] = None
     mlp_norm_kwargs:       Optional[dict]  = None
+
+    # Флаг: подавать global_state [h; global_state] на вход hyper-ячейки вместо [h; x]
+    hyper_use_global_state: bool = False
+    global_state_size:       int = 0
 
     @staticmethod
     def associated_class():

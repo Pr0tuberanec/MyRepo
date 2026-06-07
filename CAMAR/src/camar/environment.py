@@ -299,7 +299,7 @@ class Camar:
             * on_goal.all(axis=-1).astype(jnp.float32)
             * jnp.ones_like(goal_progress)
         )
-        collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32) * 0
+        collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
         total = goal_bonus + team_bonus + collision_penalty + goal_progress
         return {
             "goal_progress": goal_progress,
