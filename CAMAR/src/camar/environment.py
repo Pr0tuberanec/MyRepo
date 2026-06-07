@@ -118,6 +118,7 @@ class Camar:
             is_collision=jnp.full((self.num_agents,), False, dtype=jnp.bool_),  # no checks on reset
             step=0,
             on_goal=on_goal,
+            min_goal_dist=goal_dist,
             time_to_reach_goal=jnp.full((self.num_agents,), self.max_time),
             num_collisions=jnp.zeros((self.num_agents,), dtype=jnp.int32),
             goal_keys=goal_keys,
@@ -184,6 +185,8 @@ class Camar:
         time_to_reach_goal = jnp.where(just_arrived, current_time, state.time_to_reach_goal)
         num_collisions = state.num_collisions + is_collision.astype(jnp.int32)
 
+        min_goal_dist = jnp.minimum(state.min_goal_dist, goal_dist)
+
         new_state = state.replace(
             physical_state=physical_state,
             goal_pos=goal_pos,
@@ -191,6 +194,7 @@ class Camar:
             is_collision=is_collision,
             step=state.step + 1,
             on_goal=on_goal,
+            min_goal_dist=min_goal_dist,
             time_to_reach_goal=time_to_reach_goal,
             num_collisions=num_collisions,
             goal_keys=goal_keys,
@@ -286,20 +290,21 @@ class Camar:
     def get_reward_components(
         self, state: State, actions: ArrayLike, new_state: State
     ) -> dict[str, Array]:
-        old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
-        on_goal = new_goal_dist < (
+        goal_rad = (
             self.map_generator.goal_rad if self.homogeneous_goals else new_state.sizes.goal_rad
         )
+        on_goal = new_goal_dist < goal_rad
 
-        goal_progress = self.pos_shaping_factor * (old_goal_dist - new_goal_dist)
-        goal_bonus = 0.5 * on_goal.astype(jnp.float32)
+        goal_progress = self.pos_shaping_factor * (state.min_goal_dist - new_goal_dist)   
+        # Мягкая награда за близость к цели: r_g * clip((1 - d_g) / Rad_g, 0, 1)
+        goal_bonus = 0.5 * jnp.clip((1.0 - new_goal_dist) / goal_rad, 0.0, 1.0)
         team_bonus = (
-            0.5
+            1.0
             * on_goal.all(axis=-1).astype(jnp.float32)
             * jnp.ones_like(goal_progress)
         )
-        collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
+        collision_penalty = -0.5 * new_state.is_collision.astype(jnp.float32)
         total = goal_bonus + team_bonus + collision_penalty + goal_progress
         return {
             "goal_progress": goal_progress,

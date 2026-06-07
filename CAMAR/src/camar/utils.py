@@ -48,6 +48,7 @@ class State:
 
     # metrics
     on_goal: ArrayLike  # [num_agents, ]
+    min_goal_dist: ArrayLike  # [num_agents, ] — лучшее (мин.) расстояние до цели за эпизод
     time_to_reach_goal: ArrayLike  # [num_agents, ]
     num_collisions: ArrayLike  # [num_agents, ]
 

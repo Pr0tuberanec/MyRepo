@@ -16,6 +16,9 @@ import os
 import sys
 from pathlib import Path
 
+# --- Colab: корень репозитория (где лежат BenchMARL/ и CAMAR/) ---
+ROOT = Path("/content/Nauchka")  # подставь свой путь
+
 # --- подставь путь к чекпоинту ---
 CHECKPOINT = "outputs/.../checkpoints/checkpoint_1000000.pt"
 
@@ -27,7 +30,28 @@ DEVICE = "cpu"                    # "cuda" если есть GPU
 
 # ---------------------------------------------------------------------------
 
-ROOT = Path(__file__).resolve().parent.parent
+def _resolve_root() -> Path:
+    # Локальный запуск: .../Nauchka/BenchMARL/visualize_checkpoint.py
+    try:
+        candidate = Path(__file__).resolve().parent.parent
+        if (candidate / "BenchMARL").is_dir():
+            return candidate
+    except NameError:
+        pass  # Colab / Jupyter — нет __file__
+    root = Path(ROOT)
+    if (root / "BenchMARL").is_dir():
+        return root
+    cwd = Path.cwd()
+    if (cwd / "BenchMARL").is_dir():
+        return cwd
+    if (cwd / "Nauchka" / "BenchMARL").is_dir():
+        return cwd / "Nauchka"
+    raise FileNotFoundError(
+        f"Не найден BenchMARL. Задай ROOT = Path('...') в начале скрипта. cwd={cwd}"
+    )
+
+
+ROOT = _resolve_root()
 sys.path.insert(0, str(ROOT / "BenchMARL"))
 sys.path.insert(0, str(ROOT / "CAMAR" / "src"))
 
@@ -41,13 +65,21 @@ from camar.integrations.torchrl import CamarWrapper
 from camar.render import MPLVisualizer, SVGVisualizer
 
 
-def get_state_from_envs(state, env_id: int = 0):
-    """Один env из батчевого JAX-state."""
-    state_data = {
-        field.name: getattr(state, field.name)[env_id]
-        for field in dataclasses.fields(state)
-    }
-    return type(state)(**state_data)
+def get_state_from_envs(state, env_id: int = 0, batched: bool = True):
+    """Один env из батчевого JAX-state (рекурсивно по вложенным struct)."""
+
+    def _slice(obj):
+        if dataclasses.is_dataclass(obj):
+            return type(obj)(**{f.name: _slice(getattr(obj, f.name)) for f in dataclasses.fields(obj)})
+        # лист: jax/numpy array с batch-осью
+        if batched and hasattr(obj, "shape") and len(getattr(obj, "shape", ())) > 0:
+            try:
+                return obj[env_id]
+            except (TypeError, IndexError, KeyError):
+                pass
+        return obj
+
+    return _slice(state)
 
 
 def unwrap_camar(env) -> CamarWrapper:
@@ -79,8 +111,10 @@ def main():
     camar = unwrap_camar(env)
     camar.state_seq = []
 
+    batched = len(camar.batch_size) > 0
+
     def rendering_callback(rollout_env, _td):
-        camar.state_seq.append(get_state_from_envs(camar._state, 0))
+        camar.state_seq.append(get_state_from_envs(camar._state, 0, batched=batched))
 
     if EVAL_SEED is not None:
         try:
