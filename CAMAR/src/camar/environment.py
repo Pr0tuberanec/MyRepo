@@ -332,7 +332,7 @@ class Camar:
             * jnp.maximum(0.0, (new_goal_dist - old_goal_dist) / goal_rad)
             * visited_goal.astype(jnp.float32)
         )
-        collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
+        collision_penalty = -0.1 * new_state.is_collision.astype(jnp.float32)
         total = goal_bonus + team_bonus + collision_penalty + goal_progress + goal_retreat_penalty
         return {
             "goal_progress": goal_progress,
