@@ -306,16 +306,22 @@ class Camar:
         goal_progress = self.pos_shaping_factor * jnp.maximum(
             0.0, state.min_goal_dist - new_goal_dist
         )
-        # Мягкий бонус за улучшение рекорда: r_g * max(0, (d_best - d_g) / Rad_g)
-        goal_bonus = 0.5 * jnp.maximum(
-            0.0, (state.min_goal_dist - new_goal_dist) / goal_rad
+        on_goal = new_goal_dist < goal_rad
+        # Мягкий бонус за улучшение рекорда внутри eval-зоны: r_g * max(0, (d_best - d_g) / Rad_g)
+        goal_bonus = (
+            0.5
+            * jnp.maximum(0.0, (state.min_goal_dist - new_goal_dist) / goal_rad)
+            * on_goal.astype(jnp.float32)
         )
-        # Командный бонус при улучшении худшего агента: r_t * max(0, (max d_best - max d) / Rad)
+        # Командный бонус, если худший агент улучшил рекорд внутри eval-зоны
         prev_worst_dist = jnp.max(state.min_goal_dist)
         new_worst_dist = jnp.max(new_goal_dist)
         team_norm_rad = jnp.max(goal_rad)
-        team_bonus = 0.5 * jnp.maximum(
-            0.0, (prev_worst_dist - new_worst_dist) / team_norm_rad
+        worst_on_goal = new_worst_dist < team_norm_rad
+        team_bonus = (
+            0.5
+            * jnp.maximum(0.0, (prev_worst_dist - new_worst_dist) / team_norm_rad)
+            * worst_on_goal.astype(jnp.float32)
         )
         team_bonus = jnp.broadcast_to(team_bonus, goal_progress.shape)
         collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
