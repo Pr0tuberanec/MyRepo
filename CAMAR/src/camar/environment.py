@@ -329,7 +329,7 @@ class Camar:
         visited_goal = state.min_goal_dist < goal_rad
         goal_retreat_penalty = (
             -0.5
-            * jnp.maximum(0.0, (new_goal_dist - state.min_goal_dist) / goal_rad)
+            * jnp.maximum(0.0, (new_goal_dist - old_goal_dist) / goal_rad)
             * visited_goal.astype(jnp.float32)
         )
         collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
