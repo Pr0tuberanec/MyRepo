@@ -20,6 +20,7 @@ class Camar:
         frameskip: int = 1,
         max_obs: int = 3,
         pos_shaping_factor: float = 0.0,
+        goal_rad_eval_factor: float = 2.5,
         contact_force: float = 500,
         contact_margin: float = 0.001,
     ):
@@ -41,6 +42,7 @@ class Camar:
 
         self.frameskip = frameskip
         self.pos_shaping_factor = pos_shaping_factor
+        self.goal_rad_eval_factor = goal_rad_eval_factor
         self.window = window
         self.max_obs = min(max_obs, self.num_agents + self.num_landmarks - 1)
 
@@ -106,7 +108,8 @@ class Camar:
         goal_keys, landmark_pos, agent_pos, goal_pos, sizes = self.map_reset(key)
 
         goal_dist = jnp.linalg.norm(agent_pos - goal_pos, axis=-1)
-        on_goal = goal_dist < (self.map_generator.goal_rad if self.homogeneous_goals else sizes.goal_rad)
+        _, eval_goal_rad = self._goal_rads(sizes)
+        on_goal = goal_dist < eval_goal_rad
 
         physical_state = self.dynamic.state_class.create(key, landmark_pos, agent_pos, goal_pos, sizes)
 
@@ -166,12 +169,12 @@ class Camar:
         is_collision = is_collision >= 1
 
         goal_dist = jnp.linalg.norm(physical_state.agent_pos - state.goal_pos, axis=-1)  # (num_agents, )
-        on_goal = goal_dist < (
-            self.map_generator.goal_rad if self.homogeneous_goals else state.sizes.goal_rad
-        )  # (num_agents, )
+        done_goal_rad, eval_goal_rad = self._goal_rads(state.sizes)
+        on_goal = goal_dist < eval_goal_rad  # (num_agents, )
+        on_goal_done = goal_dist < done_goal_rad
 
         # done = jnp.full((self.num_agents, ), state.step >= self.max_steps)
-        done = jnp.logical_or(state.step >= self.max_steps, on_goal.all(axis=-1))
+        done = jnp.logical_or(state.step >= self.max_steps, on_goal_done.all(axis=-1))
 
         # terminated = on_goal.all(axis=-1)
         # truncated = state.step >= self.max_steps
@@ -283,6 +286,13 @@ class Camar:
 
         return obs.reshape(self.num_agents, self.observation_size)
 
+    def _goal_rads(self, sizes) -> tuple[Array, Array]:
+        done_goal_rad = (
+            self.map_generator.goal_rad if self.homogeneous_goals else sizes.goal_rad
+        )
+        eval_goal_rad = self.goal_rad_eval_factor * done_goal_rad
+        return done_goal_rad, eval_goal_rad
+
     def get_reward(self, state: State, actions: ArrayLike, new_state: State) -> Array:
         reward_components = self.get_reward_components(state, actions, new_state)
         return reward_components["total"].reshape(-1, 1)
@@ -292,20 +302,16 @@ class Camar:
     ) -> dict[str, Array]:
         old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
-        goal_rad = (
-            self.map_generator.goal_rad if self.homogeneous_goals else new_state.sizes.goal_rad
-        )
-        on_goal = new_goal_dist < goal_rad
+        _, goal_rad = self._goal_rads(new_state.sizes)
 
-        goal_progress = self.pos_shaping_factor * (old_goal_dist - new_goal_dist)   
+        goal_progress = self.pos_shaping_factor * (state.min_goal_dist - new_goal_dist)
         # Мягкая награда за близость к цели: r_g * clip(1 - d_g / Rad_g, 0, 1)
         goal_bonus = 0.5 * jnp.clip(1.0 - new_goal_dist / goal_rad, 0.0, 1.0)
-        team_bonus = (
-            1.0
-            * on_goal.all(axis=-1).astype(jnp.float32)
-            * jnp.ones_like(goal_progress)
-        )
-        collision_penalty = -0.5 * new_state.is_collision.astype(jnp.float32)
+        # Мягкий командный бонус по худшему агенту: r_t * clip(1 - max_i(d_i / Rad_i), 0, 1)
+        max_normalized_goal_dist = jnp.max(new_goal_dist / goal_rad, axis=-1)
+        team_bonus = 0.5 * jnp.clip(1.0 - max_normalized_goal_dist, 0.0, 1.0)
+        team_bonus = jnp.broadcast_to(team_bonus, goal_progress.shape)
+        collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
         total = goal_bonus + team_bonus + collision_penalty + goal_progress
         return {
             "goal_progress": goal_progress,

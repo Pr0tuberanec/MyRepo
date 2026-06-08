@@ -41,6 +41,7 @@ class CamarClass(TaskClass):
                 frameskip=self.config.get("frameskip", 2),
                 max_obs=self.config.get("max_obs", 3),
                 pos_shaping_factor=self.config.get("pos_shaping_factor", 1.0),
+                goal_rad_eval_factor=self.config.get("goal_rad_eval_factor", 2.5),
                 contact_force=self.config.get("contact_force", 500),
                 contact_margin=self.config.get("contact_margin", 0.001),
                 map_kwargs=self.config.get("map_kwargs", None),

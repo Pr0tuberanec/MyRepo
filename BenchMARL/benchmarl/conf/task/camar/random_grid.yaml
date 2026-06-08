@@ -7,6 +7,7 @@ max_steps: 1000
 frameskip: 15
 max_obs: 3 # can be adjusted
 pos_shaping_factor: 1.0 # can be adjusted
+goal_rad_eval_factor: 2.5 # reward/eval radius = factor * done goal_rad
 contact_force: 500
 contact_margin: 0.001
 

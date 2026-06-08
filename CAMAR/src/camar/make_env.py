@@ -52,6 +52,7 @@ def make_env(
     frameskip: int = 2,
     max_obs: int = 3,
     pos_shaping_factor: float = 1.0,
+    goal_rad_eval_factor: float = 2.5,
     contact_force: float = 500,
     contact_margin: float = 0.001,
     map_kwargs: Optional[dict] = None,
@@ -69,6 +70,7 @@ def make_env(
         frameskip=frameskip,
         max_obs=max_obs,
         pos_shaping_factor=pos_shaping_factor,
+        goal_rad_eval_factor=goal_rad_eval_factor,
         contact_force=contact_force,
         contact_margin=contact_margin,
     )

@@ -361,6 +361,7 @@ class CamarEnv(CamarWrapper):
         contact_margin,
         map_kwargs,
         dynamic_kwargs,
+        goal_rad_eval_factor=2.5,
     ):
         batch_size = [num_envs]
 
@@ -377,6 +378,7 @@ class CamarEnv(CamarWrapper):
             frameskip=frameskip,
             max_obs=max_obs,
             pos_shaping_factor=pos_shaping_factor,
+            goal_rad_eval_factor=goal_rad_eval_factor,
             contact_force=contact_force,
             contact_margin=contact_margin,
             map_kwargs=map_kwargs,
@@ -405,6 +407,7 @@ class CamarEnv(CamarWrapper):
         contact_margin,
         map_kwargs,
         dynamic_kwargs,
+        goal_rad_eval_factor=2.5,
     ):
         self.map_generator = map_generator
 
@@ -417,6 +420,7 @@ class CamarEnv(CamarWrapper):
             frameskip=frameskip,
             max_obs=max_obs,
             pos_shaping_factor=pos_shaping_factor,
+            goal_rad_eval_factor=goal_rad_eval_factor,
             contact_force=contact_force,
             contact_margin=contact_margin,
             map_kwargs=map_kwargs,
