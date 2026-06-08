@@ -26,7 +26,18 @@ class CamarWrapper(_EnvWrapper):
         cls._jax = jax
         return jax
 
-    def __init__(self, seed, device, batch_size, env=None, **kwargs):
+    def __init__(
+        self,
+        seed,
+        device,
+        batch_size,
+        env=None,
+        collision_penalty_start: float = 0.0,
+        collision_penalty_end: float = -0.1,
+        collision_penalty_curriculum_frames=None,
+        collision_penalty_curriculum: bool = True,
+        **kwargs,
+    ):
         if env is not None:
             kwargs["env"] = env
 
@@ -36,6 +47,16 @@ class CamarWrapper(_EnvWrapper):
         kwargs["device"] = device
         kwargs["batch_size"] = batch_size
         kwargs["seed"] = seed
+
+        self.collision_penalty_start = collision_penalty_start
+        self.collision_penalty_end = collision_penalty_end
+        self.collision_penalty_curriculum_frames = (
+            1_000_000
+            if collision_penalty_curriculum_frames is None
+            else collision_penalty_curriculum_frames
+        )
+        self.collision_penalty_curriculum = collision_penalty_curriculum
+        self._curriculum_frames = 0
 
         super().__init__(**kwargs)
 
@@ -162,11 +183,29 @@ class CamarWrapper(_EnvWrapper):
     #     # state = _tree_reshape(state, self.batch_size)
     #     return state
 
+    def _collision_penalty_factor(self) -> float:
+        if not self.collision_penalty_curriculum:
+            return self.collision_penalty_end
+        if (
+            self.collision_penalty_curriculum_frames is None
+            or self.collision_penalty_curriculum_frames <= 0
+        ):
+            return self.collision_penalty_end
+        progress = min(
+            1.0,
+            self._curriculum_frames / self.collision_penalty_curriculum_frames,
+        )
+        return self.collision_penalty_start + progress * (
+            self.collision_penalty_end - self.collision_penalty_start
+        )
+
     def _init_env(self):
         jax = self.jax
         self._key = None
         self._jit_vmap_env_reset = jax.jit(jax.vmap(self._env.reset))
-        self._jit_vmap_env_step = jax.jit(jax.vmap(self._env.step))
+        self._jit_vmap_env_step = jax.jit(
+            jax.vmap(self._env.step, in_axes=(0, 0, 0, None))
+        )
         self._jit_vmap_env_get_obs = jax.jit(jax.vmap(self._env.get_obs))
 
         self._jit_partial_reset = jax.jit(self._partial_reset)
@@ -295,9 +334,15 @@ class CamarWrapper(_EnvWrapper):
         # call env step with jit and vmap
         self._key, *keys_s = jax.random.split(self._key, 1 + self.numel())
 
+        collision_penalty_factor = self._collision_penalty_factor()
         obs, self._state, reward, done, info = self._jit_vmap_env_step(
-            jax.numpy.stack(keys_s), self._state, action
+            jax.numpy.stack(keys_s),
+            self._state,
+            action,
+            collision_penalty_factor,
         )
+        if self.collision_penalty_curriculum:
+            self._curriculum_frames += self.numel()
 
         tensordict_agents = TensorDict(
             source={
@@ -330,8 +375,15 @@ class CamarWrapper(_EnvWrapper):
                 "coordination": coordination,
                 "info": TensorDict(
                     {
-                        key: _ndarray_to_tensor(value)
-                        for key, value in info.items()
+                        **{
+                            key: _ndarray_to_tensor(value)
+                            for key, value in info.items()
+                        },
+                        "collision_penalty_factor": torch.full(
+                            self.batch_size,
+                            collision_penalty_factor,
+                            device=self.device,
+                        ),
                     },
                     batch_size=self.batch_size,
                     device=self.device,

@@ -450,6 +450,7 @@ class Experiment(CallbackNotifier):
             continuous_actions=self.continuous_actions,
             seed=self.seed,
             device=self.config.sampling_device,
+            for_evaluation=True,
         )()
         env_func = self.task.get_env_fun(
             num_envs=self.config.n_envs_per_worker(self.on_policy),

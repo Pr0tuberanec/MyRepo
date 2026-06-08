@@ -27,6 +27,7 @@ class CamarClass(TaskClass):
         continuous_actions: bool,
         seed: Optional[int],
         device: DEVICE_TYPING,
+        for_evaluation: bool = False,
     ) -> Callable[[], EnvBase]:
         self.batch_size = (num_envs,)
         self.device = device
@@ -53,6 +54,12 @@ class CamarClass(TaskClass):
                 device=device,
                 batch_size=num_envs,
                 env=base_env,
+                collision_penalty_start=self.config.get("collision_penalty_start", 0.0),
+                collision_penalty_end=self.config.get("collision_penalty_end", -0.1),
+                collision_penalty_curriculum_frames=self.config.get(
+                    "collision_penalty_curriculum_frames", 1_000_000
+                ),
+                collision_penalty_curriculum=not for_evaluation,
             )
 
         return make_env

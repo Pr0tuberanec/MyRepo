@@ -8,6 +8,9 @@ frameskip: 15
 max_obs: 3 # can be adjusted
 pos_shaping_factor: 1.0 # can be adjusted
 goal_rad_eval_factor: 2.5 # reward/eval radius = factor * done goal_rad
+collision_penalty_start: 0.0
+collision_penalty_end: -0.1
+collision_penalty_curriculum_frames: 500_000 # linear 0 -> -0.1 over this many env frames
 contact_force: 500
 contact_margin: 0.001
 

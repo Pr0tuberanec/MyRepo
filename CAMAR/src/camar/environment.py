@@ -132,7 +132,11 @@ class Camar:
         return obs, state
 
     def step(
-        self, key: ArrayLike, state: State, actions: ArrayLike
+        self,
+        key: ArrayLike,
+        state: State,
+        actions: ArrayLike,
+        collision_penalty_factor: float = -0.1,
     ) -> tuple[Array, State, Array, Array, dict]:
         # actions (num_agents, 2)
         key, key_w = jax.random.split(key)
@@ -204,7 +208,9 @@ class Camar:
         )
 
         obs = self.get_obs(new_state)
-        reward_components = self.get_reward_components(state, actions, new_state)
+        reward_components = self.get_reward_components(
+            state, actions, new_state, collision_penalty_factor
+        )
         reward = reward_components["total"].reshape(-1, 1)
         info = {
             "reward_goal_progress_mean": reward_components["goal_progress"].mean(),
@@ -298,7 +304,11 @@ class Camar:
         return reward_components["total"].reshape(-1, 1)
 
     def get_reward_components(
-        self, state: State, actions: ArrayLike, new_state: State
+        self,
+        state: State,
+        actions: ArrayLike,
+        new_state: State,
+        collision_penalty_factor: float = -0.1,
     ) -> dict[str, Array]:
         old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
@@ -332,7 +342,9 @@ class Camar:
             * jnp.maximum(0.0, (new_goal_dist - old_goal_dist) / goal_rad)
             * visited_goal.astype(jnp.float32)
         )
-        collision_penalty = -0.1 * new_state.is_collision.astype(jnp.float32)
+        collision_penalty = (
+            collision_penalty_factor * new_state.is_collision.astype(jnp.float32)
+        )
         total = goal_bonus + team_bonus + collision_penalty + goal_progress + goal_retreat_penalty
         return {
             "goal_progress": goal_progress,
