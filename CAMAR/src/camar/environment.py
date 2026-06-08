@@ -300,6 +300,7 @@ class Camar:
     def get_reward_components(
         self, state: State, actions: ArrayLike, new_state: State
     ) -> dict[str, Array]:
+        old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
         _, goal_rad = self._goal_rads(new_state.sizes)
 
@@ -324,12 +325,20 @@ class Camar:
             * worst_on_goal.astype(jnp.float32)
         )
         team_bonus = jnp.broadcast_to(team_bonus, goal_progress.shape)
+        # Штраф за отход от цели после посещения eval-зоны
+        visited_goal = state.min_goal_dist < goal_rad
+        goal_retreat_penalty = (
+            -0.5
+            * jnp.maximum(0.0, (new_goal_dist - state.min_goal_dist) / goal_rad)
+            * visited_goal.astype(jnp.float32)
+        )
         collision_penalty = -1.0 * new_state.is_collision.astype(jnp.float32)
-        total = goal_bonus + team_bonus + collision_penalty + goal_progress
+        total = goal_bonus + team_bonus + collision_penalty + goal_progress + goal_retreat_penalty
         return {
             "goal_progress": goal_progress,
             "goal_bonus": goal_bonus,
             "team_bonus": team_bonus,
+            "goal_retreat_penalty": goal_retreat_penalty,
             "collision_penalty": collision_penalty,
             "total": total,
         }
