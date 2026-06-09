@@ -5,7 +5,7 @@
 #
 
 from dataclasses import dataclass, MISSING
-from typing import Dict, Iterable, Tuple, Type
+from typing import Dict, Iterable, Optional, Tuple, Type
 
 import torch
 from tensordict import TensorDictBase
@@ -57,6 +57,8 @@ class Mappo(Algorithm):
         scale_mapping: str,
         use_tanh_normal: bool,
         minibatch_advantage: bool,
+        entropy_coef_end: Optional[float] = None,
+        entropy_anneal_frames: Optional[int] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -64,6 +66,8 @@ class Mappo(Algorithm):
         self.share_param_critic = share_param_critic
         self.clip_epsilon = clip_epsilon
         self.entropy_coef = entropy_coef
+        self.entropy_coef_end = entropy_coef_end
+        self.entropy_anneal_frames = entropy_anneal_frames
         self.critic_coef = critic_coef
         self.loss_critic_type = loss_critic_type
         self.lmbda = lmbda
@@ -83,7 +87,7 @@ class Mappo(Algorithm):
             actor=policy_for_loss,
             critic=self.get_critic(group),
             clip_epsilon=self.clip_epsilon,
-            entropy_coeff=self.entropy_coef,
+            entropy_coeff=self._entropy_coef(),
             critic_coeff=self.critic_coef,
             loss_critic_type=self.loss_critic_type,
             normalize_advantage=False,
@@ -271,6 +275,22 @@ class Mappo(Algorithm):
     # Custom new methods
     #####################
 
+    def _entropy_coef(self) -> float:
+        if self.entropy_coef_end is None:
+            return self.entropy_coef
+        frames = self.entropy_anneal_frames
+        if frames is None:
+            frames = self.experiment_config.get_exploration_anneal_frames(self.on_policy)
+        if frames <= 0:
+            return self.entropy_coef_end
+        t = min(1.0, self.experiment.total_frames / frames)
+        return self.entropy_coef + t * (self.entropy_coef_end - self.entropy_coef)
+
+    def step_entropy(self) -> None:
+        coef = self._entropy_coef()
+        for group in self.group_map.keys():
+            self.get_loss_and_updater(group)[0].entropy_coeff = coef
+
     def get_critic(self, group: str) -> TensorDictModule:
         n_agents = len(self.group_map[group])
         if self.share_param_critic:
@@ -326,6 +346,8 @@ class MappoConfig(AlgorithmConfig):
     share_param_critic: bool = MISSING
     clip_epsilon: float = MISSING
     entropy_coef: float = MISSING
+    entropy_coef_end: Optional[float] = None
+    entropy_anneal_frames: Optional[int] = None
     critic_coef: float = MISSING
     loss_critic_type: str = MISSING
     lmbda: float = MISSING

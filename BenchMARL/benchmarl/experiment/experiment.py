@@ -731,6 +731,8 @@ class Experiment(CallbackNotifier):
 
             # Loop over groups
             training_start = time.time()
+            if hasattr(self.algorithm, "step_entropy"):
+                self.algorithm.step_entropy()
             for group in self.train_group_map.keys():
                 group_batch = batch.exclude(*self._get_excluded_keys(group)).to(
                     self.config.train_device
