@@ -377,6 +377,8 @@ class Experiment(CallbackNotifier):
 
         if self.config.restore_file is not None:
             self._load_experiment()
+            if hasattr(self.algorithm, "step_entropy"):
+                self.algorithm.step_entropy()
 
     @property
     def on_policy(self) -> bool:

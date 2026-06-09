@@ -290,7 +290,7 @@ class Mappo(Algorithm):
     def step_entropy(self) -> None:
         coef = self._entropy_coef()
         for group in self.group_map.keys():
-            self.get_loss_and_updater(group)[0].entropy_coeff = coef
+            self.get_loss_and_updater(group)[0].entropy_coeff.fill_(coef)
 
     def get_critic(self, group: str) -> TensorDictModule:
         n_agents = len(self.group_map[group])
