@@ -283,7 +283,8 @@ class Mappo(Algorithm):
             frames = self.experiment_config.get_exploration_anneal_frames(self.on_policy)
         if frames <= 0:
             return self.entropy_coef_end
-        t = min(1.0, self.experiment.total_frames / frames)
+        total_frames = getattr(self.experiment, "total_frames", 0)
+        t = min(1.0, total_frames / frames)
         return self.entropy_coef + t * (self.entropy_coef_end - self.entropy_coef)
 
     def step_entropy(self) -> None:
