@@ -346,14 +346,14 @@ class MappoConfig(AlgorithmConfig):
     share_param_critic: bool = MISSING
     clip_epsilon: float = MISSING
     entropy_coef: float = MISSING
-    entropy_coef_end: Optional[float] = None
-    entropy_anneal_frames: Optional[int] = None
     critic_coef: float = MISSING
     loss_critic_type: str = MISSING
     lmbda: float = MISSING
     scale_mapping: str = MISSING
     use_tanh_normal: bool = MISSING
     minibatch_advantage: bool = MISSING
+    entropy_coef_end: Optional[float] = None
+    entropy_anneal_frames: Optional[int] = None
 
     @staticmethod
     def associated_class() -> Type[Algorithm]:
