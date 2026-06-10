@@ -84,6 +84,9 @@ class CamarClass(TaskClass):
         for group in self.group_map(env):
             if "info" in observation_spec[group]:
                 del observation_spec[(group, "info")]
+            # goal_state is for critic global state only, not actor input
+            if "goal_state" in observation_spec[group]:
+                del observation_spec[(group, "goal_state")]
         return observation_spec
 
     def info_spec(self, env: EnvBase) -> Optional[Composite]:
