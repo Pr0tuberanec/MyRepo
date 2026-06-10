@@ -93,12 +93,18 @@ class CamarClass(TaskClass):
         return env.full_action_spec_unbatched
 
     def state_spec(self, env: EnvBase) -> Optional[Composite]:
+        from benchmarl.environments.camar.transforms import GOAL_STATE_DIM
+
         obs_shape = env.observation_spec["agents", "observation"].shape
         n_agents, obs_dim = obs_shape[-2], obs_shape[-1]
+        extra = (
+            n_agents * GOAL_STATE_DIM
+            if self.config.get("include_goal_dist_in_state", True)
+            else 0
+        )
 
         return Composite(
-            {"state": Unbounded(shape=(n_agents * obs_dim,), device=env.device)},
-            # {"state": Unbounded(shape=(n_agents * (obs_dim + 5),), device=env.device)},  # with phys_state
+            {"state": Unbounded(shape=(n_agents * obs_dim + extra,), device=env.device)},
             device=env.device,
         )
 
@@ -111,7 +117,13 @@ class CamarClass(TaskClass):
         - ``TensorDictPrimer``: adds ``h_0`` so recurrent actor has a hidden state on the first step (if use_gire).
         """
         from benchmarl.environments.camar.transforms import CamarGlobalStateTransform
-        transforms = [CamarGlobalStateTransform(group="agents")]
+
+        transforms = [
+            CamarGlobalStateTransform(
+                group="agents",
+                include_goal_dist=self.config.get("include_goal_dist_in_state", True),
+            )
+        ]
 
         # Only add h_0 and is_init if we explicitly enable GIRE in the task config
         if self.config.get("use_gire", False):

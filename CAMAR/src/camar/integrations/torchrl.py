@@ -160,6 +160,10 @@ class CamarWrapper(_EnvWrapper):
         #     shape=(*self.batch_size, env.num_agents, 5),
         #     device=self.device,
         # )
+        agents_observation["goal_state"] = Unbounded(
+            shape=(*self.batch_size, env.num_agents, 2),
+            device=self.device,
+        )
         self.observation_spec = Composite(
             agents=agents_observation,
             info=info_spec,
@@ -230,6 +234,18 @@ class CamarWrapper(_EnvWrapper):
     #         rad = state.sizes.agent_rad[..., jax.numpy.newaxis]  # (batch, N, 1)
     #     return _ndarray_to_tensor(jax.numpy.concatenate([pos, vel, rad], axis=-1))
 
+    def _goal_state_tensor(self, state) -> torch.Tensor:
+        """(batch, N, 2): per-agent [goal_dist, min_goal_dist] / window."""
+        jax = self.jax
+        pos = state.physical_state.agent_pos
+        goal_dist = jax.numpy.linalg.norm(pos - state.goal_pos, axis=-1)
+        scale = jax.numpy.float32(self._env.window)
+        goal_state = jax.numpy.stack(
+            [goal_dist / scale, state.min_goal_dist / scale],
+            axis=-1,
+        )
+        return _ndarray_to_tensor(goal_state)
+
     def _partial_reset(self, keys, state, envs_to_reset):
         obs_r, state_r = self._jit_vmap_env_reset(keys)
 
@@ -274,6 +290,7 @@ class CamarWrapper(_EnvWrapper):
         tensordict_agents = TensorDict(
             source={
                 "observation": _ndarray_to_tensor(obs),
+                "goal_state": self._goal_state_tensor(self._state),
                 # "phys_state": self._phys_state_tensor(self._state),
             },
             batch_size=(*self.batch_size, self._env.num_agents),
@@ -347,6 +364,7 @@ class CamarWrapper(_EnvWrapper):
         tensordict_agents = TensorDict(
             source={
                 "observation": _ndarray_to_tensor(obs),
+                "goal_state": self._goal_state_tensor(self._state),
                 "reward": _ndarray_to_tensor(reward),
                 "on_goal": _ndarray_to_tensor(self._state.on_goal).view(*self.batch_size, -1, 1),
                 # "phys_state": self._phys_state_tensor(self._state),
