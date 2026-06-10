@@ -123,12 +123,15 @@ def collect_reward_trace(env, policy, max_steps: int, seed: int | None, device: 
     env.reset()
     reset_state = get_state_from_envs(camar._state, 0, batched=batched)
 
-    # Пересчёт компонент reward по сохранённой траектории
+    # Пересчёт компонент reward по сохранённой траектории (тот же factor, что в rollout)
+    collision_penalty_factor = camar._collision_penalty_factor()
     traces = {name: [] for name in COMPONENTS}
     prev_state = reset_state
     for t, new_state in enumerate(states_after_step):
         action = actions_per_step[t]
-        comps = raw_env.get_reward_components(prev_state, action, new_state)
+        comps = raw_env.get_reward_components(
+            prev_state, action, new_state, collision_penalty_factor
+        )
         for name in COMPONENTS:
             traces[name].append(np.asarray(comps[name], dtype=np.float32))
         prev_state = new_state
