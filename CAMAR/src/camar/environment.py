@@ -310,7 +310,7 @@ class Camar:
         state: State,
         actions: ArrayLike,
         new_state: State,
-        collision_penalty_factor: float = -0.1,
+        collision_penalty_factor: float = -1,
     ) -> dict[str, Array]:
         """Original reward: shaping without clip, team bonus when all agents on goal."""
         old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
