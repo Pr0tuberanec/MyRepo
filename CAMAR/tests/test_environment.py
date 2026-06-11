@@ -116,6 +116,20 @@ class TestEnvironment:
         assert obs_next.shape == (env.num_agents, env.observation_size)
         assert reward.shape == (env.num_agents, 1)
 
+    def test_legacy_rewards_dispatch(self):
+        key = jax.random.key(0)
+        key_r, key_a, key_s = jax.random.split(key, 3)
+        env = camar_v0(map_generator=random_grid(num_agents=2), legacy_rewards=True)
+        obs, state = env.reset(key_r)
+        actions = env.action_spaces.sample(key_a)
+        _, new_state, _, _, _ = env.step(key_s, state, actions)
+
+        comps = env.get_reward_components(state, actions, new_state, collision_penalty_factor=0.0)
+        legacy = env.get_reward_components_legacy(state, actions, new_state, collision_penalty_factor=0.0)
+        for k in comps:
+            assert jnp.allclose(comps[k], legacy[k]), k
+        assert jnp.allclose(comps["goal_retreat_penalty"], 0.0)
+
     def test_env_with_diffdrive_dynamic(self):
         env = camar_v0(
             map_generator=string_grid(map_str="...", num_agents=1),

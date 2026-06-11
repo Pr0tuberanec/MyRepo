@@ -21,6 +21,7 @@ class Camar:
         max_obs: int = 3,
         pos_shaping_factor: float = 0.0,
         goal_rad_eval_factor: float = 2.5,
+        legacy_rewards: bool = False,
         contact_force: float = 500,
         contact_margin: float = 0.001,
     ):
@@ -43,6 +44,7 @@ class Camar:
         self.frameskip = frameskip
         self.pos_shaping_factor = pos_shaping_factor
         self.goal_rad_eval_factor = goal_rad_eval_factor
+        self.legacy_rewards = legacy_rewards
         self.window = window
         self.max_obs = min(max_obs, self.num_agents + self.num_landmarks - 1)
 
@@ -303,6 +305,38 @@ class Camar:
         reward_components = self.get_reward_components(state, actions, new_state)
         return reward_components["total"].reshape(-1, 1)
 
+    def get_reward_components_legacy(
+        self,
+        state: State,
+        actions: ArrayLike,
+        new_state: State,
+        collision_penalty_factor: float = -0.1,
+    ) -> dict[str, Array]:
+        """Original reward: shaping without clip, team bonus when all agents on goal."""
+        old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
+        new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
+        done_goal_rad, _ = self._goal_rads(new_state.sizes)
+        on_goal = new_goal_dist < done_goal_rad
+
+        goal_progress = self.pos_shaping_factor * (old_goal_dist - new_goal_dist)
+        goal_bonus = 0.5 * on_goal.astype(jnp.float32)
+        team_bonus = (
+            0.5
+            * on_goal.all(axis=-1).astype(jnp.float32)
+            * jnp.ones_like(goal_progress)
+        )
+        collision_penalty = collision_penalty_factor * new_state.is_collision.astype(jnp.float32)
+        goal_retreat_penalty = jnp.zeros_like(goal_progress)
+        total = goal_bonus + team_bonus + collision_penalty + goal_progress + goal_retreat_penalty
+        return {
+            "goal_progress": goal_progress,
+            "goal_bonus": goal_bonus,
+            "team_bonus": team_bonus,
+            "goal_retreat_penalty": goal_retreat_penalty,
+            "collision_penalty": collision_penalty,
+            "total": total,
+        }
+
     def get_reward_components(
         self,
         state: State,
@@ -310,6 +344,10 @@ class Camar:
         new_state: State,
         collision_penalty_factor: float = -0.1,
     ) -> dict[str, Array]:
+        if self.legacy_rewards:
+            return self.get_reward_components_legacy(
+                state, actions, new_state, collision_penalty_factor
+            )
         old_goal_dist = jnp.linalg.norm(state.physical_state.agent_pos - state.goal_pos, axis=-1)
         new_goal_dist = jnp.linalg.norm(new_state.physical_state.agent_pos - new_state.goal_pos, axis=-1)
         _, goal_rad = self._goal_rads(new_state.sizes)
