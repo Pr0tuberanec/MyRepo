@@ -6,7 +6,7 @@ window: 0.3
 max_steps: 1000
 frameskip: 15
 max_obs: 3 # can be adjusted
-include_goal_dist_in_state: true # goal_dist + min_goal_dist per agent in critic global state
+include_goal_dist_in_state: false # goal_dist + min_goal_dist per agent in critic global state
 pos_shaping_factor: 1.0 # can be adjusted
 goal_rad_eval_factor: 2.5 # reward/eval radius = factor * done goal_rad
 collision_penalty_start: 0.0
