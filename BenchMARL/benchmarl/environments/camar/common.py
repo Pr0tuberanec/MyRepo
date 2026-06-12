@@ -10,6 +10,7 @@ from camar import camar_v0
 class CamarTask(Task):
     RANDOM_GRID = None
     RANDOM_GRID_2 = None
+    LABMAZE_GRID = None
 
     @staticmethod
     def associated_class():
