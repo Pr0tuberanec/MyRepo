@@ -9,6 +9,7 @@ max_obs: 3 # can be adjusted
 include_goal_dist_in_state: false # goal_dist + min_goal_dist per agent in critic global state
 pos_shaping_factor: 1.0 # can be adjusted
 goal_rad_eval_factor: 2.5 # reward/eval radius = factor * done goal_rad
+goal_retreat_penalty_factor: -0.5 # penalty scale for leaving goal after visiting eval zone
 legacy_rewards: true # original shaping + team bonus when all on goal
 collision_penalty_start: 0.0
 collision_penalty_end: -0.1

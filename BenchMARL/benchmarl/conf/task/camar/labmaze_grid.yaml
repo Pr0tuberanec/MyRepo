@@ -9,6 +9,7 @@ max_obs: 3 # can be adjusted
 include_goal_dist_in_state: false
 pos_shaping_factor: 1.0 # can be adjusted
 goal_rad_eval_factor: 2.5
+goal_retreat_penalty_factor: -0.5
 legacy_rewards: true
 collision_penalty_start: -1.0
 collision_penalty_end: -1.0

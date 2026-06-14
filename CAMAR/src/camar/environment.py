@@ -21,6 +21,7 @@ class Camar:
         max_obs: int = 3,
         pos_shaping_factor: float = 0.0,
         goal_rad_eval_factor: float = 2.5,
+        goal_retreat_penalty_factor: float = -0.5,
         legacy_rewards: bool = False,
         contact_force: float = 500,
         contact_margin: float = 0.001,
@@ -44,6 +45,7 @@ class Camar:
         self.frameskip = frameskip
         self.pos_shaping_factor = pos_shaping_factor
         self.goal_rad_eval_factor = goal_rad_eval_factor
+        self.goal_retreat_penalty_factor = goal_retreat_penalty_factor
         self.legacy_rewards = legacy_rewards
         self.window = window
         self.max_obs = min(max_obs, self.num_agents + self.num_landmarks - 1)
@@ -376,7 +378,7 @@ class Camar:
         # Штраф за отход от цели после посещения eval-зоны
         visited_goal = state.min_goal_dist < goal_rad
         goal_retreat_penalty = (
-            -0.5
+            self.goal_retreat_penalty_factor
             * jnp.maximum(0.0, (new_goal_dist - old_goal_dist) / goal_rad)
             * visited_goal.astype(jnp.float32)
         )
