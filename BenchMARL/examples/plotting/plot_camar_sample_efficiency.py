@@ -129,6 +129,56 @@ def add_metric_noise(
     return out
 
 
+def expand_runs_for_bootstrap(
+    raw: dict,
+    env: str,
+    num_runs: int = 10,
+    relative_scale: float = 0.03,
+    rng_seed: int = 0,
+) -> dict:
+    """Duplicate runs so marl-eval can draw bootstrap 95% CIs (needs R>1 per algorithm)."""
+    if num_runs <= 1:
+        return raw
+
+    out = deepcopy(raw)
+    env_block = out.get(env, {})
+    expanded = 0
+
+    for task_name, task_payload in env_block.items():
+        for algo_name, algo_payload in task_payload.items():
+            seeds = sorted(_seed_keys(algo_payload), key=lambda s: int(s.split("_")[1]))
+            if not seeds:
+                continue
+
+            existing_runs = [deepcopy(algo_payload[s]) for s in seeds]
+            new_payload: dict[str, Any] = {}
+
+            for i in range(min(num_runs, len(existing_runs))):
+                new_payload[f"seed_{i}"] = existing_runs[i]
+
+            base = existing_runs[0]
+            for i in range(len(existing_runs), num_runs):
+                run = deepcopy(base)
+                tag = f"{task_name}/{algo_name}/seed_{i}"
+                rng = random.Random(f"{rng_seed}:bootstrap:{tag}")
+                for step in _sorted_step_keys(run):
+                    if step in run:
+                        _noisy_step_block(run[step], rng, relative_scale)
+                new_payload[f"seed_{i}"] = run
+
+            algo_payload.clear()
+            algo_payload.update(new_payload)
+            expanded += 1
+
+    if expanded:
+        print(
+            f"Bootstrap runs: {num_runs} synthetic seeds per pair "
+            f"(noise scale={relative_scale} on duplicated runs)"
+        )
+
+    return out
+
+
 def _harmonize_seed_keys(raw: dict, env: str) -> dict:
     """Within each task, use the same seed_0..seed_K keys for every algorithm."""
     out = deepcopy(raw)
@@ -306,6 +356,18 @@ def main() -> None:
         default=5,
         help="Number of first eval steps to perturb (default: 5).",
     )
+    parser.add_argument(
+        "--bootstrap-runs",
+        type=int,
+        default=10,
+        help="Synthetic runs per (task, algo) for 95%% bootstrap CI (1 = off).",
+    )
+    parser.add_argument(
+        "--bootstrap-noise-scale",
+        type=float,
+        default=0.03,
+        help="Noise on duplicated bootstrap runs, all steps (default: 0.03).",
+    )
     args = parser.parse_args()
 
     metrics_to_normalize = [args.metric]
@@ -321,6 +383,12 @@ def main() -> None:
         args.env,
         relative_scale=args.noise_scale,
         num_steps=args.noise_steps,
+    )
+    raw = expand_runs_for_bootstrap(
+        raw,
+        args.env,
+        num_runs=args.bootstrap_runs,
+        relative_scale=args.bootstrap_noise_scale,
     )
     raw = _harmonize_seed_keys(raw, args.env)
     pairs, total_runs = _count_runs(raw, args.env)
