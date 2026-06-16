@@ -19,25 +19,11 @@ import json
 from pathlib import Path
 from typing import Iterable
 
-import colorcet as cc
-import numpy as np
-import seaborn as sns
 from matplotlib import pyplot as plt
-from marl_eval.utils.data_processing_utils import get_and_aggregate_data_single_task
 
 from plotting_import import get_plotting
 
 Plotting = get_plotting()
-
-DEFAULT_TASKS = ("random_grid", "labmaze_grid")
-TASK_LINESTYLES = {
-    "random_grid": "-",
-    "labmaze_grid": "--",
-}
-ALGO_COLORS = {
-    "mappo_lstm": sns.color_palette(cc.glasbey_category10)[0],
-    "mappo_hyperlstm": sns.color_palette(cc.glasbey_category10)[1],
-}
 
 
 def _seed_keys(d: dict) -> list[str]:
@@ -77,10 +63,7 @@ def _merge_jsons_as_independent_runs(json_files: list[str], env: str) -> dict:
 
 
 def _harmonize_seed_keys(raw: dict, env: str) -> dict:
-    """Within each task, use the same seed_0..seed_K keys for every algorithm.
-
-    marl-eval assumes all algorithms on a task share identical run keys.
-  """
+    """Within each task, use the same seed_0..seed_K keys for every algorithm."""
     out = deepcopy(raw)
     env_block = out.get(env, {})
     for task_name, task_payload in env_block.items():
@@ -138,102 +121,38 @@ def _filter_tasks(raw: dict, env: str, include_substrings: tuple[str, ...]) -> d
     return out
 
 
-def _discover_tasks(raw: dict, env: str, tasks: tuple[str, ...]) -> list[str]:
-    env_block = raw.get(env, {})
-    if tasks:
-        return [task for task in tasks if task in env_block and env_block[task]]
-    return sorted(env_block.keys())
-
-
-def _legend_label(algo: str, task: str) -> str:
-    task_label = task.replace("_", " ")
-    algo_label = algo.replace("_", " ").upper()
-    return f"{algo_label} · {task_label}"
-
-
-def _plot_tasks_combined(
+def _plot_and_save(
     raw: dict,
     env: str,
     out_png: Path,
     title: str,
     metric_name: str = "return",
     metrics_to_normalize: list[str] | None = None,
-    tasks: tuple[str, ...] = DEFAULT_TASKS,
 ) -> None:
-    """One figure: each (task, algorithm) pair is a separate curve with 95% CI."""
     if metrics_to_normalize is None:
         metrics_to_normalize = [metric_name]
-
     processed = Plotting.process_data(raw, metrics_to_normalize=metrics_to_normalize)
-    available_tasks = _discover_tasks(raw, env, tasks)
-    if not available_tasks:
-        raise ValueError(f"No tasks from {tasks} found in env='{env}'.")
-
-    if metric_name in metrics_to_normalize:
-        ylabel = "Normalized " + " ".join(metric_name.split("_"))
+    _, sample_efficiency_matrix = Plotting.create_matrices(
+        processed,
+        env_name=env,
+        metrics_to_normalize=metrics_to_normalize,
+    )
+    plot_obj, _, _ = Plotting.environemnt_sample_efficiency_curves(
+        sample_effeciency_matrix=sample_efficiency_matrix,
+        metric_name=metric_name,
+        metrics_to_normalize=metrics_to_normalize,
+    )
+    # marl-eval may return either Figure or Axes depending on version.
+    if hasattr(plot_obj, "suptitle"):
+        fig = plot_obj
+        fig.suptitle(title)
     else:
-        ylabel = " ".join(metric_name.split("_")).capitalize()
-
-    fig, ax = plt.subplots(figsize=(15, 8))
-    plotted = 0
-
-    for task in available_tasks:
-        task_block = raw.get(env, {}).get(task, {})
-        if not task_block:
-            continue
-
-        task_mean_ci = get_and_aggregate_data_single_task(
-            processed_data=processed,
-            environment_name=env,
-            metric_name=metric_name,
-            task_name=task,
-            metrics_to_normalize=metrics_to_normalize,
-        )
-        extra = task_mean_ci.pop("extra")
-        eval_interval = extra["evaluation_interval"]
-        if isinstance(eval_interval, dict):
-            eval_interval = eval_interval[env]
-
-        for algo in sorted(task_block.keys()):
-            algo_key = next(
-                (k for k in task_mean_ci if k.lower() == algo.lower()),
-                None,
-            )
-            if algo_key is None:
-                print(f"Skip missing curve: {task}/{algo}")
-                continue
-
-            series = task_mean_ci[algo_key]
-            x = np.arange(len(series["mean"])) * eval_interval
-            color = ALGO_COLORS.get(algo.lower(), sns.color_palette(cc.glasbey_category10)[plotted % 10])
-            linestyle = TASK_LINESTYLES.get(task, "-")
-            label = _legend_label(algo, task)
-
-            ax.plot(
-                x,
-                series["mean"],
-                color=color,
-                linestyle=linestyle,
-                linewidth=2,
-                label=label,
-            )
-            lower = np.array(series["mean"]) - np.array(series["ci"])
-            upper = np.array(series["mean"]) + np.array(series["ci"])
-            ax.fill_between(x, lower, upper, color=color, alpha=0.2)
-            plotted += 1
-
-    if plotted == 0:
-        raise ValueError("No (task, algorithm) curves could be plotted from the input data.")
-
-    ax.set_xlabel("Timesteps", fontsize="xx-large")
-    ax.set_ylabel(ylabel, fontsize="xx-large")
-    ax.tick_params(axis="both", which="major", labelsize="xx-large")
-    ax.grid(True, alpha=0.25)
-    ax.legend(fontsize="large", loc="best")
-    fig.suptitle(title, fontsize="xx-large", y=1.02)
+        ax = plot_obj
+        fig = ax.figure
+        ax.set_title(title)
     fig.savefig(out_png, dpi=180, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved: {out_png} ({plotted} curves: {', '.join(available_tasks)})")
+    print(f"Saved: {out_png}")
 
 
 def _aggregate_table(
@@ -308,12 +227,6 @@ def main() -> None:
         default="return",
         help="Metric key in marl-eval JSON (e.g. return, success_rate).",
     )
-    parser.add_argument(
-        "--tasks",
-        nargs="+",
-        default=list(DEFAULT_TASKS),
-        help="Tasks to plot on one figure (default: random_grid labmaze_grid).",
-    )
     args = parser.parse_args()
 
     metrics_to_normalize = [args.metric]
@@ -331,18 +244,17 @@ def main() -> None:
     if args.single_run:
         print("Mode: single-run per configuration (R=1).")
 
-    _plot_tasks_combined(
+    _plot_and_save(
         raw=raw,
         env=args.env,
         out_png=out_dir / "sample_efficiency_camar_all.png",
         title=(
-            "CAMAR sample efficiency (random_grid + labmaze_grid)"
-            if len(args.tasks) > 1
-            else f"CAMAR sample efficiency ({args.tasks[0]})"
+            "CAMAR sample efficiency (all tasks, single-run)"
+            if args.single_run
+            else "CAMAR sample efficiency (all tasks)"
         ),
         metric_name=args.metric,
         metrics_to_normalize=metrics_to_normalize,
-        tasks=tuple(args.tasks),
     )
 
     raw_random = _filter_tasks(raw, args.env, ("random_grid",))
