@@ -33,11 +33,6 @@ from matplotlib import pyplot as plt
 from rliable import library as rly
 from rliable import metrics as rly_metrics
 
-from plotting_import import get_load_and_merge_json_dicts, get_plotting
-
-Plotting = get_plotting()
-load_and_merge_json_dicts = get_load_and_merge_json_dicts()
-
 CAMAR_METRICS: list[tuple[str, str, str]] = [
     ("success_rate", "mean_success_rate", "Success Rate"),
     ("flowtime", "mean_flowtime", "Flowtime"),
@@ -126,6 +121,10 @@ def _harmonize_seed_keys(raw: dict, env: str) -> dict:
         min_runs = min(counts)
         if max(counts) != min_runs:
             print(f"Harmonize {task_name}: keep {min_runs} run(s) per algorithm")
+            for algo_name, algo_payload in task_payload.items():
+                n = len(_seed_keys(algo_payload))
+                if n != min_runs:
+                    print(f"  {algo_name}: {n} -> {min_runs} (drops {n - min_runs})")
         for algo_name, algo_payload in list(task_payload.items()):
             seeds = sorted(_seed_keys(algo_payload), key=lambda s: int(s.split("_")[1]))
             task_payload[algo_name] = {
@@ -158,18 +157,39 @@ def _set_absolute_metrics_from_best_return(run: dict[str, Any], selection_metric
     run["absolute_metrics"] = absolute
 
 
+def _absolute_metric_value(run: dict[str, Any], metric: str) -> float:
+    abs_block = run.get("absolute_metrics")
+    if not abs_block or metric not in abs_block:
+        raise KeyError(
+            f"Missing absolute_metrics['{metric}']. "
+            "Ensure JSON has eval steps and CAMAR callback metrics."
+        )
+    value = abs_block[metric]
+    if isinstance(value, list):
+        return float(np.mean(value))
+    return float(value)
+
+
+def build_matrices_from_absolute_metrics(task_payload: dict[str, Any]) -> dict[str, dict[str, np.ndarray]]:
+    """IQM input matrices from absolute_metrics only (no step_* alignment needed)."""
+    matrices: dict[str, dict[str, np.ndarray]] = {}
+    for metric_key, matrix_key, _ in CAMAR_METRICS:
+        matrices[matrix_key] = {}
+        for algo_name, runs in task_payload.items():
+            seeds = sorted(_seed_keys(runs), key=lambda s: int(s.split("_")[1]))
+            values = [_absolute_metric_value(runs[s], metric_key) for s in seeds]
+            matrices[matrix_key][algo_name] = np.asarray(values, dtype=float).reshape(-1, 1)
+    return matrices
+
+
 def _write_task_table(
     task: str,
-    task_raw: dict,
-    env: str,
+    task_payload: dict[str, Any],
     out_dir: Path,
     legend_map: dict[str, str] | None,
     decimals: int,
 ) -> None:
-    task_proc = Plotting.process_data(task_raw, metrics_to_normalize=METRICS_TO_NORMALIZE)
-    task_cm, _ = Plotting.create_matrices(
-        task_proc, env_name=env, metrics_to_normalize=METRICS_TO_NORMALIZE
-    )
+    task_cm = build_matrices_from_absolute_metrics(task_payload)
     task_df, task_scores = build_camar_table(
         task_cm, legend_map=legend_map, decimals=decimals
     )
@@ -346,11 +366,10 @@ def main() -> None:
         raise ValueError(f"No requested tasks found. Available: {sorted(available)}")
 
     for task in tasks:
-        task_raw = {args.env: {task: raw[args.env][task]}}
+        task_payload = raw[args.env][task]
         _write_task_table(
             task,
-            task_raw,
-            env=args.env,
+            task_payload,
             out_dir=out_dir,
             legend_map=legend_map or None,
             decimals=args.decimals,
