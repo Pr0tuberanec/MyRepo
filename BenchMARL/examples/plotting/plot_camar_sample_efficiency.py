@@ -133,8 +133,17 @@ def _aggregate_table(raw: dict, env: str, out_prefix: Path, title: str) -> None:
     print(f"\n{title}")
     for algo, metric_vals in scores.items():
         for metric_name, value in metric_vals.items():
-            lo, hi = cis[algo][metric_name]
-            print(f"  {algo} | {metric_name}: {value:.4f} [{lo:.4f}, {hi:.4f}]")
+            ci_val = cis.get(algo, {}).get(metric_name)
+            if isinstance(value, (int, float)) and isinstance(ci_val, (tuple, list)) and len(ci_val) == 2:
+                lo, hi = ci_val
+                if isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
+                    print(f"  {algo} | {metric_name}: {value:.4f} [{lo:.4f}, {hi:.4f}]")
+                    continue
+            # Some marl-eval versions return already formatted strings.
+            if ci_val is not None:
+                print(f"  {algo} | {metric_name}: {value} {ci_val}")
+            else:
+                print(f"  {algo} | {metric_name}: {value}")
     print(f"Saved table files with prefix: {out_prefix}")
 
 
