@@ -5,7 +5,10 @@ from pathlib import Path
 
 from matplotlib import pyplot as plt
 
-from benchmarl.eval_results import Plotting, load_and_merge_json_dicts
+from plotting_import import get_load_and_merge_json_dicts, get_plotting
+
+Plotting = get_plotting()
+load_and_merge_json_dicts = get_load_and_merge_json_dicts()
 
 JSON_PATH = Path(__file__).resolve().parent / "demo_ptde_compare.json"
 OUT_DIR = Path(__file__).resolve().parent / "output"
