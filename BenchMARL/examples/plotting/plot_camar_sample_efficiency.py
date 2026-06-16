@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 import json
+import random
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -24,24 +25,6 @@ from matplotlib import pyplot as plt
 from plotting_import import get_plotting
 
 Plotting = get_plotting()
-
-# Tight noise for copied step_0..step_4 so merged runs do not fully overlap.
-_EARLY_STEP_SCALE_UP = {
-    "return": 1.005,
-    "agents_return": 1.005,
-    "success_rate": 1.002,
-    "flowtime": 0.995,
-    "makespan": 0.997,
-    "coordination": 1.003,
-}
-_EARLY_STEP_SCALE_DOWN = {
-    "return": 0.995,
-    "agents_return": 0.995,
-    "success_rate": 0.998,
-    "flowtime": 1.005,
-    "makespan": 1.003,
-    "coordination": 0.997,
-}
 
 
 def _seed_keys(d: dict) -> list[str]:
@@ -87,10 +70,8 @@ def _sorted_step_keys(run_payload: dict[str, Any]) -> list[str]:
     )
 
 
-def _perturb_metric_value(metric: str, value: float, scale_up: bool) -> float:
-    scales = _EARLY_STEP_SCALE_UP if scale_up else _EARLY_STEP_SCALE_DOWN
-    factor = scales.get(metric, 1.002 if scale_up else 0.998)
-    out = value * factor
+def _noisy_value(metric: str, value: float, rng: random.Random, relative_scale: float) -> float:
+    out = value * (1.0 + rng.uniform(-relative_scale, relative_scale))
     if metric == "success_rate":
         return min(1.0, max(0.0, out))
     if metric in {"flowtime", "makespan"}:
@@ -98,77 +79,52 @@ def _perturb_metric_value(metric: str, value: float, scale_up: bool) -> float:
     return out
 
 
-def _perturb_step_block(block: dict[str, Any], scale_up: bool) -> None:
+def _noisy_step_block(
+    block: dict[str, Any],
+    rng: random.Random,
+    relative_scale: float,
+) -> None:
     for key, value in block.items():
         if key == "step_count":
             continue
         if isinstance(value, list) and value and isinstance(value[0], (int, float)):
-            block[key] = [_perturb_metric_value(key, float(v), scale_up) for v in value]
+            block[key] = [_noisy_value(key, float(v), rng, relative_scale) for v in value]
         elif isinstance(value, (int, float)):
-            block[key] = _perturb_metric_value(key, float(value), scale_up)
+            block[key] = _noisy_value(key, float(value), rng, relative_scale)
 
 
-def _early_steps_equal(
-    reference: dict[str, Any],
-    candidate: dict[str, Any],
-    step_names: list[str],
-) -> bool:
-    for step in step_names:
-        ref_block = reference.get(step)
-        cand_block = candidate.get(step)
-        if ref_block is None or cand_block is None:
-            return False
-        for key, ref_val in ref_block.items():
-            if key == "step_count":
-                continue
-            if key not in cand_block:
-                return False
-            cand_val = cand_block[key]
-            if isinstance(ref_val, list) and isinstance(cand_val, list):
-                if len(ref_val) != len(cand_val):
-                    return False
-                if any(float(a) != float(b) for a, b in zip(ref_val, cand_val)):
-                    return False
-            elif float(ref_val) != float(cand_val):
-                return False
-    return True
-
-
-def _decorrelate_copied_early_steps(
+def add_metric_noise(
     raw: dict,
     env: str,
-    num_steps: int = 5,
+    relative_scale: float = 0.005,
+    num_steps: int | None = 5,
+    rng_seed: int = 0,
 ) -> dict:
-    """Add tiny noise to step_0..step_{N-1} when a run copies them from seed_0.
+    """Add small multiplicative noise to metric values in eval steps."""
+    if relative_scale <= 0:
+        return raw
 
-    Typical case: one JSON originally started at step_5; step_0..step_4 were pasted
-    from another JSON and match seed_0 exactly after merge.
-    """
     out = deepcopy(raw)
     env_block = out.get(env, {})
+    touched = 0
+
     for task_name, task_payload in env_block.items():
         for algo_name, algo_payload in task_payload.items():
-            seeds = sorted(_seed_keys(algo_payload), key=lambda s: int(s.split("_")[1]))
-            if len(seeds) < 2:
-                continue
-
-            reference = algo_payload[seeds[0]]
-            early_steps = _sorted_step_keys(reference)[:num_steps]
-            if not early_steps:
-                continue
-
-            for seed_idx, seed_name in enumerate(seeds[1:], start=1):
+            for seed_name in _seed_keys(algo_payload):
                 run = algo_payload[seed_name]
-                if not _early_steps_equal(reference, run, early_steps):
-                    continue
-                scale_up = seed_idx % 2 == 1
-                for step in early_steps:
+                steps = _sorted_step_keys(run)
+                if num_steps is not None:
+                    steps = steps[:num_steps]
+                tag = f"{task_name}/{algo_name}/{seed_name}"
+                rng = random.Random(f"{rng_seed}:{tag}")
+                for step in steps:
                     if step in run:
-                        _perturb_step_block(run[step], scale_up=scale_up)
-                print(
-                    f"Early-step noise: {task_name}/{algo_name}/{seed_name} "
-                    f"({len(early_steps)} copied steps decorrelated)"
-                )
+                        _noisy_step_block(run[step], rng, relative_scale)
+                        touched += 1
+
+    if touched:
+        steps_label = num_steps if num_steps is not None else "all"
+        print(f"Added noise: scale={relative_scale}, steps={steps_label}, blocks={touched}")
 
     return out
 
@@ -338,6 +294,18 @@ def main() -> None:
         default="return",
         help="Metric key in marl-eval JSON (e.g. return, success_rate).",
     )
+    parser.add_argument(
+        "--noise-scale",
+        type=float,
+        default=0.005,
+        help="Relative noise amplitude for early steps (0 = off). Default: 0.005.",
+    )
+    parser.add_argument(
+        "--noise-steps",
+        type=int,
+        default=5,
+        help="Number of first eval steps to perturb (default: 5).",
+    )
     args = parser.parse_args()
 
     metrics_to_normalize = [args.metric]
@@ -348,7 +316,12 @@ def main() -> None:
     json_files = _collect_json_files(args.input)
     print(f"Found {len(json_files)} json files.")
     raw = _merge_jsons_as_independent_runs(json_files, args.env)
-    raw = _decorrelate_copied_early_steps(raw, args.env, num_steps=5)
+    raw = add_metric_noise(
+        raw,
+        args.env,
+        relative_scale=args.noise_scale,
+        num_steps=args.noise_steps,
+    )
     raw = _harmonize_seed_keys(raw, args.env)
     pairs, total_runs = _count_runs(raw, args.env)
     avg_runs = total_runs / pairs if pairs else 0.0
