@@ -97,12 +97,19 @@ def _plot_and_save(raw: dict, env: str, out_png: Path, title: str) -> None:
         env_name=env,
         metrics_to_normalize=["return"],
     )
-    fig, _, _ = Plotting.environemnt_sample_efficiency_curves(
+    plot_obj, _, _ = Plotting.environemnt_sample_efficiency_curves(
         sample_effeciency_matrix=sample_efficiency_matrix,
         metric_name="return",
         metrics_to_normalize=["return"],
     )
-    fig.suptitle(title)
+    # marl-eval may return either Figure or Axes depending on version.
+    if hasattr(plot_obj, "suptitle"):
+        fig = plot_obj
+        fig.suptitle(title)
+    else:
+        ax = plot_obj
+        fig = ax.figure
+        ax.set_title(title)
     fig.savefig(out_png, dpi=180, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out_png}")
