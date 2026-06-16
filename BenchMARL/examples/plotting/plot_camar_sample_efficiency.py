@@ -15,12 +15,49 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import json
 from pathlib import Path
 from typing import Iterable
 
 from matplotlib import pyplot as plt
 
-from benchmarl.eval_results import Plotting, load_and_merge_json_dicts
+from benchmarl.eval_results import Plotting
+
+
+def _seed_keys(d: dict) -> list[str]:
+    return sorted(k for k in d.keys() if k.startswith("seed_"))
+
+
+def _merge_jsons_as_independent_runs(json_files: list[str], env: str) -> dict:
+    """Merge json files while preserving every run, even with different seed names.
+
+    marl-eval needs consistent run keys across tasks/algorithms.
+    We reindex all discovered runs as seed_0..seed_K per task/algorithm.
+    """
+    merged: dict = {env: {}}
+    counters: dict[tuple[str, str], int] = {}
+
+    for file in json_files:
+        with open(file, "r") as f:
+            data = json.load(f)
+        env_block = data.get(env, {})
+        for task_name, task_payload in env_block.items():
+            merged[env].setdefault(task_name, {})
+            for algo_name, algo_payload in task_payload.items():
+                merged[env][task_name].setdefault(algo_name, {})
+                key = (task_name, algo_name)
+                counters.setdefault(key, 0)
+                for seed_name in _seed_keys(algo_payload):
+                    run_payload = deepcopy(algo_payload[seed_name])
+                    new_seed = f"seed_{counters[key]}"
+                    merged[env][task_name][algo_name][new_seed] = run_payload
+                    counters[key] += 1
+
+    if not merged[env]:
+        raise ValueError(f"No data found for env='{env}' in provided inputs.")
+    total = sum(counters.values())
+    print(f"Merged runs as independent seeds: {total}")
+    return merged
 
 
 def _collect_json_files(inputs: Iterable[str]) -> list[str]:
@@ -94,6 +131,18 @@ def _aggregate_table(raw: dict, env: str, out_prefix: Path, title: str) -> None:
     print(f"Saved table files with prefix: {out_prefix}")
 
 
+def _count_runs(raw: dict, env: str) -> tuple[int, int]:
+    """Return (num_task_algo_pairs, total_runs_over_pairs)."""
+    env_block = raw.get(env, {})
+    pairs = 0
+    total_runs = 0
+    for task_payload in env_block.values():
+        for algo_payload in task_payload.values():
+            pairs += 1
+            total_runs += len(_seed_keys(algo_payload))
+    return pairs, total_runs
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -104,6 +153,11 @@ def main() -> None:
     )
     parser.add_argument("--env", default="camar", help="Environment key in marl-eval dict.")
     parser.add_argument("--out-dir", required=True, help="Directory to save output figures.")
+    parser.add_argument(
+        "--single-run",
+        action="store_true",
+        help="Use when each configuration has one run (different seed names).",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir).expanduser().resolve()
@@ -111,14 +165,23 @@ def main() -> None:
 
     json_files = _collect_json_files(args.input)
     print(f"Found {len(json_files)} json files.")
-    raw = load_and_merge_json_dicts(json_files)
+    raw = _merge_jsons_as_independent_runs(json_files, args.env)
+    pairs, total_runs = _count_runs(raw, args.env)
+    avg_runs = total_runs / pairs if pairs else 0.0
+    print(f"Task/algorithm pairs: {pairs}, total runs: {total_runs}, avg runs per pair: {avg_runs:.2f}")
+    if args.single_run:
+        print("Mode: single-run per configuration (R=1).")
 
     # One combined sample-efficiency plot (as requested).
     _plot_and_save(
         raw=raw,
         env=args.env,
         out_png=out_dir / "sample_efficiency_camar_all.png",
-        title="CAMAR sample efficiency (all tasks)",
+        title=(
+            "CAMAR sample efficiency (all tasks, single-run)"
+            if args.single_run
+            else "CAMAR sample efficiency (all tasks)"
+        ),
     )
 
     # Separate aggregate tables by map type.
