@@ -73,6 +73,16 @@ def _collect_json_files(inputs: Iterable[str]) -> list[str]:
     return files
 
 
+def _infer_algo_from_filepath(path: str) -> str | None:
+    """Map experiment folder/json name to algorithm key (hyperlstm before lstm)."""
+    name = Path(path).name.lower()
+    if "hyperlstm" in name:
+        return "mappo_hyperlstm"
+    if "lstm" in name:
+        return "mappo_lstm"
+    return None
+
+
 def _merge_jsons_as_independent_runs(json_files: list[str], env: str) -> dict:
     merged: dict = {env: {}}
     counters: dict[tuple[str, str], int] = {}
@@ -83,9 +93,11 @@ def _merge_jsons_as_independent_runs(json_files: list[str], env: str) -> dict:
 
             data = json.load(f)
         env_block = data.get(env, {})
+        file_algo = _infer_algo_from_filepath(file)
         for task_name, task_payload in env_block.items():
             merged[env].setdefault(task_name, {})
             for algo_name, algo_payload in task_payload.items():
+                algo_name = file_algo or algo_name
                 merged[env][task_name].setdefault(algo_name, {})
                 key = (task_name, algo_name)
                 counters.setdefault(key, 0)
@@ -97,6 +109,8 @@ def _merge_jsons_as_independent_runs(json_files: list[str], env: str) -> dict:
     if not merged[env]:
         raise ValueError(f"No data found for env='{env}' in provided inputs.")
     print(f"Merged runs: {sum(counters.values())} from {len(json_files)} file(s)")
+    for key, n in sorted(counters.items()):
+        print(f"  {key[0]} / {key[1]}: {n} run(s)")
     return merged
 
 
