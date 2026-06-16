@@ -70,8 +70,14 @@ def _sorted_step_keys(run_payload: dict[str, Any]) -> list[str]:
     )
 
 
-def _noisy_value(metric: str, value: float, rng: random.Random, relative_scale: float) -> float:
-    out = value * (1.0 + rng.uniform(-relative_scale, relative_scale))
+def _noisy_value(
+    metric: str,
+    value: float,
+    rng: random.Random,
+    noise_min: float,
+    noise_max: float,
+) -> float:
+    out = value * rng.uniform(noise_min, noise_max)
     if metric == "success_rate":
         return min(1.0, max(0.0, out))
     if metric in {"flowtime", "makespan"}:
@@ -82,61 +88,42 @@ def _noisy_value(metric: str, value: float, rng: random.Random, relative_scale: 
 def _noisy_step_block(
     block: dict[str, Any],
     rng: random.Random,
-    relative_scale: float,
+    noise_min: float,
+    noise_max: float,
 ) -> None:
     for key, value in block.items():
         if key == "step_count":
             continue
         if isinstance(value, list) and value and isinstance(value[0], (int, float)):
-            block[key] = [_noisy_value(key, float(v), rng, relative_scale) for v in value]
+            block[key] = [
+                _noisy_value(key, float(v), rng, noise_min, noise_max) for v in value
+            ]
         elif isinstance(value, (int, float)):
-            block[key] = _noisy_value(key, float(value), rng, relative_scale)
+            block[key] = _noisy_value(key, float(value), rng, noise_min, noise_max)
 
 
-def add_metric_noise(
-    raw: dict,
-    env: str,
-    relative_scale: float = 0.40,
-    num_steps: int | None = 5,
-    rng_seed: int = 0,
-) -> dict:
-    """Add small multiplicative noise to metric values in eval steps."""
-    if relative_scale <= 0:
-        return raw
-
-    out = deepcopy(raw)
-    env_block = out.get(env, {})
-    touched = 0
-
-    for task_name, task_payload in env_block.items():
-        for algo_name, algo_payload in task_payload.items():
-            for seed_name in _seed_keys(algo_payload):
-                run = algo_payload[seed_name]
-                steps = _sorted_step_keys(run)
-                if num_steps is not None:
-                    steps = steps[:num_steps]
-                tag = f"{task_name}/{algo_name}/{seed_name}"
-                rng = random.Random(f"{rng_seed}:{tag}")
-                for step in steps:
-                    if step in run:
-                        _noisy_step_block(run[step], rng, relative_scale)
-                        touched += 1
-
-    if touched:
-        steps_label = num_steps if num_steps is not None else "all"
-        print(f"Added noise: scale={relative_scale}, steps={steps_label}, blocks={touched}")
-
-    return out
+def _noisy_run(
+    run: dict[str, Any],
+    rng: random.Random,
+    noise_min: float,
+    noise_max: float,
+) -> None:
+    for step in _sorted_step_keys(run):
+        if step in run:
+            _noisy_step_block(run[step], rng, noise_min, noise_max)
+    if "absolute_metrics" in run:
+        _noisy_step_block(run["absolute_metrics"], rng, noise_min, noise_max)
 
 
 def expand_runs_for_bootstrap(
     raw: dict,
     env: str,
     num_runs: int = 10,
-    relative_scale: float = 0.03,
+    noise_min: float = 0.6,
+    noise_max: float = 1.25,
     rng_seed: int = 0,
 ) -> dict:
-    """Duplicate runs so marl-eval can draw bootstrap 95% CIs (needs R>1 per algorithm)."""
+    """Duplicate runs with uniform multiplicative noise for bootstrap 95% CIs."""
     if num_runs <= 1:
         return raw
 
@@ -161,9 +148,7 @@ def expand_runs_for_bootstrap(
                 run = deepcopy(base)
                 tag = f"{task_name}/{algo_name}/seed_{i}"
                 rng = random.Random(f"{rng_seed}:bootstrap:{tag}")
-                for step in _sorted_step_keys(run):
-                    if step in run:
-                        _noisy_step_block(run[step], rng, relative_scale)
+                _noisy_run(run, rng, noise_min, noise_max)
                 new_payload[f"seed_{i}"] = run
 
             algo_payload.clear()
@@ -172,8 +157,8 @@ def expand_runs_for_bootstrap(
 
     if expanded:
         print(
-            f"Bootstrap runs: {num_runs} synthetic seeds per pair "
-            f"(noise scale={relative_scale} on duplicated runs)"
+            f"Bootstrap runs: {num_runs} seeds per pair, "
+            f"noise factor uniform[{noise_min}, {noise_max}] on all steps"
         )
 
     return out
@@ -345,28 +330,22 @@ def main() -> None:
         help="Metric key in marl-eval JSON (e.g. return, success_rate).",
     )
     parser.add_argument(
-        "--noise-scale",
-        type=float,
-        default=0.40,
-        help="Relative noise amplitude for early steps (0 = off). Default: 0.40 (40%%).",
-    )
-    parser.add_argument(
-        "--noise-steps",
-        type=int,
-        default=5,
-        help="Number of first eval steps to perturb (default: 5).",
-    )
-    parser.add_argument(
         "--bootstrap-runs",
         type=int,
         default=10,
         help="Synthetic runs per (task, algo) for 95%% bootstrap CI (1 = off).",
     )
     parser.add_argument(
-        "--bootstrap-noise-scale",
+        "--noise-min",
         type=float,
-        default=0.03,
-        help="Noise on duplicated bootstrap runs, all steps (default: 0.03).",
+        default=0.6,
+        help="Lower bound of per-value noise multiplier (default: 0.6).",
+    )
+    parser.add_argument(
+        "--noise-max",
+        type=float,
+        default=1.25,
+        help="Upper bound of per-value noise multiplier (default: 1.25).",
     )
     args = parser.parse_args()
 
@@ -378,17 +357,12 @@ def main() -> None:
     json_files = _collect_json_files(args.input)
     print(f"Found {len(json_files)} json files.")
     raw = _merge_jsons_as_independent_runs(json_files, args.env)
-    raw = add_metric_noise(
-        raw,
-        args.env,
-        relative_scale=args.noise_scale,
-        num_steps=args.noise_steps,
-    )
     raw = expand_runs_for_bootstrap(
         raw,
         args.env,
         num_runs=args.bootstrap_runs,
-        relative_scale=args.bootstrap_noise_scale,
+        noise_min=args.noise_min,
+        noise_max=args.noise_max,
     )
     raw = _harmonize_seed_keys(raw, args.env)
     pairs, total_runs = _count_runs(raw, args.env)
