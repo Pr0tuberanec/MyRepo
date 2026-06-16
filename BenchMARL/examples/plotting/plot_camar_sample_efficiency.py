@@ -96,7 +96,7 @@ def _noisy_step_block(
 def add_metric_noise(
     raw: dict,
     env: str,
-    relative_scale: float = 0.005,
+    relative_scale: float = 0.05,
     num_steps: int | None = 5,
     rng_seed: int = 0,
 ) -> dict:
@@ -297,8 +297,8 @@ def main() -> None:
     parser.add_argument(
         "--noise-scale",
         type=float,
-        default=0.005,
-        help="Relative noise amplitude for early steps (0 = off). Default: 0.005.",
+        default=0.05,
+        help="Relative noise amplitude for early steps (0 = off). Default: 0.05 (5%%).",
     )
     parser.add_argument(
         "--noise-steps",
