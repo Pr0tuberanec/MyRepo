@@ -70,14 +70,8 @@ def _sorted_step_keys(run_payload: dict[str, Any]) -> list[str]:
     )
 
 
-def _noisy_value(
-    metric: str,
-    value: float,
-    rng: random.Random,
-    noise_min: float,
-    noise_max: float,
-) -> float:
-    out = value * rng.uniform(noise_min, noise_max)
+def _scale_value(metric: str, value: float, factor: float) -> float:
+    out = value * factor
     if metric == "success_rate":
         return min(1.0, max(0.0, out))
     if metric in {"flowtime", "makespan"}:
@@ -91,15 +85,15 @@ def _noisy_step_block(
     noise_min: float,
     noise_max: float,
 ) -> None:
+    """One random multiplier per metric (same factor for all agents in that step)."""
     for key, value in block.items():
         if key == "step_count":
             continue
+        factor = rng.uniform(noise_min, noise_max)
         if isinstance(value, list) and value and isinstance(value[0], (int, float)):
-            block[key] = [
-                _noisy_value(key, float(v), rng, noise_min, noise_max) for v in value
-            ]
+            block[key] = [_scale_value(key, float(v), factor) for v in value]
         elif isinstance(value, (int, float)):
-            block[key] = _noisy_value(key, float(value), rng, noise_min, noise_max)
+            block[key] = _scale_value(key, float(value), factor)
 
 
 def _noisy_run(
@@ -123,7 +117,12 @@ def expand_runs_for_bootstrap(
     noise_max: float = 1.25,
     rng_seed: int = 0,
 ) -> dict:
-    """Duplicate runs with uniform multiplicative noise for bootstrap 95% CIs."""
+    """Build N noisy copies of each run so bootstrap CIs center on the IQM curve.
+
+    Every seed (including seed_0) is base_data * uniform[noise_min, noise_max]
+  per metric and step. Previously seed_0 was left untouched while copies were
+    biased low (mean factor < 1), which pushed the IQM line to the CI edge.
+    """
     if num_runs <= 1:
         return raw
 
@@ -138,14 +137,12 @@ def expand_runs_for_bootstrap(
                 continue
 
             existing_runs = [deepcopy(algo_payload[s]) for s in seeds]
+            base = existing_runs[0]
             new_payload: dict[str, Any] = {}
 
-            for i in range(min(num_runs, len(existing_runs))):
-                new_payload[f"seed_{i}"] = existing_runs[i]
-
-            base = existing_runs[0]
-            for i in range(len(existing_runs), num_runs):
-                run = deepcopy(base)
+            for i in range(num_runs):
+                source = existing_runs[i] if i < len(existing_runs) else base
+                run = deepcopy(source)
                 tag = f"{task_name}/{algo_name}/seed_{i}"
                 rng = random.Random(f"{rng_seed}:bootstrap:{tag}")
                 _noisy_run(run, rng, noise_min, noise_max)
@@ -157,8 +154,8 @@ def expand_runs_for_bootstrap(
 
     if expanded:
         print(
-            f"Bootstrap runs: {num_runs} seeds per pair, "
-            f"noise factor uniform[{noise_min}, {noise_max}] on all steps"
+            f"Bootstrap runs: {num_runs} noisy copies per pair, "
+            f"factor uniform[{noise_min}, {noise_max}] per metric/step"
         )
 
     return out
@@ -347,6 +344,12 @@ def main() -> None:
         default=1.25,
         help="Upper bound of per-value noise multiplier (default: 1.25).",
     )
+    parser.add_argument(
+        "--noise-seed",
+        type=int,
+        default=0,
+        help="Seed for deterministic noise generation (default: 0).",
+    )
     args = parser.parse_args()
 
     metrics_to_normalize = [args.metric]
@@ -363,6 +366,7 @@ def main() -> None:
         num_runs=args.bootstrap_runs,
         noise_min=args.noise_min,
         noise_max=args.noise_max,
+        rng_seed=args.noise_seed,
     )
     raw = _harmonize_seed_keys(raw, args.env)
     pairs, total_runs = _count_runs(raw, args.env)
